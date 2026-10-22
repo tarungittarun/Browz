@@ -1,0 +1,48 @@
+{
+  "name": "browz",
+  "version": "1.0.0",
+  "description": "Minimal multi-tab desktop & web browser built for 100% network request/response capture, performance testing (HAR, k6, JMeter), isolated container sessions, and permission/hardware control.",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "desktop": "electron .",
+    "build:installer": "npx electron-builder",
+    "test": "node test/verify.js"
+  },
+  "build": {
+    "appId": "com.browz.browser",
+    "productName": "Browz",
+    "files": [
+      "electron/**/*",
+      "server/**/*",
+      "shared/**/*",
+      "public/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "keywords": [
+    "browser",
+    "electron",
+    "network-capture",
+    "performance-testing",
+    "har",
+    "k6",
+    "jmeter",
+    "containers",
+    "privacy"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

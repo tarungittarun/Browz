@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Browz — Multi-Tab Performance Capture & Control Browser</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- 1. MULTI-TAB BAR -->
+    <header class="tab-bar">
+      <div class="brand-badge">
+        <span>⚡ BROWZ</span>
+      </div>
+      <div class="tabs-scroll" id="tabsContainer"></div>
+      <div class="new-tab-controls">
+        <select id="newTabContainerSelect" class="select-input" title="Container Session for New Tab"></select>
+        <button class="btn btn-sm btn-primary" id="btnNewTab" title="Open New Tab in Selected Container">+ New Tab</button>
+      </div>
+    </header>
+
+    <!-- 2. NAVIGATION & QUICK CAPTURE BAR -->
+    <div class="nav-bar">
+      <div class="nav-btn-group">
+        <button class="btn btn-icon" id="btnBack" title="Back">←</button>
+        <button class="btn btn-icon" id="btnForward" title="Forward">→</button>
+        <button class="btn btn-icon" id="btnReload" title="Reload Active Tab">↻</button>
+      </div>
+
+      <select id="activeTabContainerSelect" class="select-input" title="Active Tab Container Session"></select>
+
+      <form class="address-form" id="addressForm">
+        <div class="url-box">
+          <span class="ssl-badge" id="sslBadge">🔒 Ready</span>
+          <input
+            type="text"
+            id="urlInput"
+            class="url-input"
+            placeholder="Enter URL (e.g. browz://testbench, https://api.github.com/repos/nodejs/node)..."
+            autocomplete="off"
+          />
+        </div>
+        <select id="quickTargetSelect" class="select-input" title="Quick Test Targets">
+          <option value="">Quick Targets…</option>
+          <option value="browz://testbench">⚡ browz://testbench (Built-in Perf Suite)</option>
+          <option value="https://api.github.com/repos/electron/electron">🌐 GitHub REST API (electron)</option>
+          <option value="https://registry.npmjs.org/ws/latest">📦 NPM Registry JSON (ws)</option>
+          <option value="https://pypi.org/pypi/locust/json">🐍 PyPI Package API (locust)</option>
+          <option value="https://github.com/electron/electron">💻 GitHub Repo Page</option>
+        </select>
+        <button type="submit" class="btn btn-primary">Go</button>
+      </form>
+
+      <div class="nav-btn-group">
+        <button class="rec-pill" id="btnRecordToggle" title="Toggle Request/Response Capture">
+          <span class="rec-dot"></span>
+          <span id="recStatusText">REC</span>
+        </button>
+
+        <select id="throttleSelect" class="select-input" title="Network Throttling Preset (#2)">
+          <option value="none">🚀 No Throttling</option>
+          <option value="fast4g">📶 Fast 4G (40ms)</option>
+          <option value="slow3g">🐢 Slow 3G (300ms)</option>
+          <option value="high_latency">🌐 High Latency (180ms)</option>
+          <option value="offline">🔌 Offline Mode</option>
+        </select>
+
+        <select id="layoutModeSelect" class="select-input" title="Split View Mode">
+          <option value="split">Split: Browser + Capture</option>
+          <option value="dock">Maximize Capture Dock</option>
+          <option value="viewport">Maximize Browser View</option>
+        </select>
+
+        <button class="btn" id="btnToggleDrawer" title="Toggle Network, Containers & Permissions Control Drawer">
+          🎛️ Controls (#2/#4/#5)
+        </button>
+      </div>
+    </div>
+
+    <!-- 3. MAIN WORKSPACE -->
+    <div class="workspace">
+      <div class="center-stack" id="centerStack">
+        <!-- Browser Tab Viewports -->
+        <div class="browser-viewport" id="browserViewport"></div>
+
+        <!-- 4. PERFORMANCE & REQUEST/RESPONSE CAPTURE DOCK -->
+        <section class="capture-dock" id="captureDock">
+          <!-- Live Performance Metrics Strip -->
+          <div class="metrics-strip" id="metricsStrip">
+            <div class="metric-item"><span class="metric-label">Captured:</span><span class="metric-val accent" id="mTotal">0</span></div>
+            <div class="metric-item"><span class="metric-label">2xx OK:</span><span class="metric-val green" id="m2xx">0</span></div>
+            <div class="metric-item"><span class="metric-label">4xx/5xx:</span><span class="metric-val amber" id="mErr">0 (0%)</span></div>
+            <div class="metric-item"><span class="metric-label">Blocked:</span><span class="metric-val red" id="mBlocked">0</span></div>
+            <div class="metric-item"><span class="metric-label">Avg Time:</span><span class="metric-val" id="mAvg">0 ms</span></div>
+            <div class="metric-item"><span class="metric-label">P50:</span><span class="metric-val" id="mP50">0 ms</span></div>
+            <div class="metric-item"><span class="metric-label">P95:</span><span class="metric-val amber" id="mP95">0 ms</span></div>
+            <div class="metric-item"><span class="metric-label">P99:</span><span class="metric-val red" id="mP99">0 ms</span></div>
+            <div class="metric-item"><span class="metric-label">Throughput:</span><span class="metric-val accent" id="mRps">0 req/s</span></div>
+            <div class="metric-item"><span class="metric-label">Transferred:</span><span class="metric-val" id="mBytes">0 KB</span></div>
+          </div>
+
+          <!-- Capture Filter & Export Toolbar -->
+          <div class="capture-toolbar">
+            <div class="toolbar-left">
+              <input
+                type="text"
+                id="filterSearch"
+                class="text-input"
+                placeholder="Search URL, header, status, body…"
+                style="width: 195px;"
+              />
+              <select id="filterScope" class="select-input">
+                <option value="all">Scope: All Tabs</option>
+                <option value="active">Scope: Active Tab</option>
+              </select>
+              <select id="filterMethod" class="select-input">
+                <option value="ALL">Method: ALL</option>
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="PUT">PUT</option>
+                <option value="DELETE">DELETE</option>
+              </select>
+              <select id="filterType" class="select-input">
+                <option value="ALL">Type: ALL</option>
+                <option value="Document">Document</option>
+                <option value="Fetch">Fetch</option>
+                <option value="XHR">XHR</option>
+                <option value="Replay">Replay</option>
+                <option value="LoadBurst">LoadBurst</option>
+              </select>
+              <select id="filterStatus" class="select-input">
+                <option value="ALL">Status: ALL</option>
+                <option value="2xx">2xx Success</option>
+                <option value="3xx">3xx Redirect</option>
+                <option value="4xx">4xx Client Err</option>
+                <option value="5xx">5xx Server Err</option>
+                <option value="BLOCKED">Blocked</option>
+              </select>
+              <button class="btn btn-sm btn-danger" id="btnClearCapture" title="Clear Captured Requests">🗑️ Clear</button>
+              <button class="btn btn-sm btn-success" id="btnOpenComposer" title="Open Request Composer & Load Burst Runner">⚡ Composer / Burst</button>
+            </div>
+
+            <div class="toolbar-right">
+              <span style="font-size:11px;color:var(--text-muted);">Export Perf Suite:</span>
+              <button class="btn btn-sm btn-primary" onclick="exportCapture('har')" title="Download HTTP Archive 1.2 (.har)">📥 .HAR</button>
+              <button class="btn btn-sm" onclick="exportCapture('k6')" title="Download Grafana k6 Load Test Script (.js)">🚀 k6 (.js)</button>
+              <button class="btn btn-sm" onclick="exportCapture('jmeter')" title="Download Apache JMeter Test Plan (.jmx)">🪶 JMeter (.jmx)</button>
+              <button class="btn btn-sm" onclick="exportCapture('csv')" title="Download CSV Report">📊 .CSV</button>
+              <button class="btn btn-sm" onclick="exportCapture('json')" title="Download Raw JSON">📄 .JSON</button>
+            </div>
+          </div>
+
+          <!-- Split Request Table + Deep Request/Response Inspector -->
+          <div class="capture-body">
+            <div class="requests-table-wrap">
+              <table class="req-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Container</th>
+                    <th>Method</th>
+                    <th>Status</th>
+                    <th>URL / Endpoint</th>
+                    <th>Type</th>
+                    <th>Size</th>
+                    <th>Time</th>
+                    <th>Waterfall (DNS/Conn/TLS/TTFB/DL)</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="requestsTableBody"></tbody>
+              </table>
+            </div>
+
+            <!-- Deep Inspector Pane -->
+            <aside class="inspector-pane hidden" id="inspectorPane">
+              <div class="inspector-tabs">
+                <button class="insp-tab active" data-itab="headers">Headers & Info</button>
+                <button class="insp-tab" data-itab="payload">Request Payload</button>
+                <button class="insp-tab" data-itab="response">Response Body</button>
+                <button class="insp-tab" data-itab="timings">Timings</button>
+                <button class="insp-tab" data-itab="cookies">Cookies</button>
+                <button class="insp-tab" data-itab="replay">Replay / Burst</button>
+                <button class="btn btn-sm" style="margin-left:auto;" id="btnCloseInspector">✕</button>
+              </div>
+              <div class="inspector-content" id="inspectorContent"></div>
+            </aside>
+          </div>
+        </section>
+      </div>
+
+      <!-- 5. CONTROL DRAWER (#2 Network, #4 Containers, #5 Permissions/Downloads/OS) -->
+      <aside class="control-drawer" id="controlDrawer">
+        <div class="drawer-header">
+          <strong style="font-size:13px;">🎛️ Browser God-Mode Controls</strong>
+          <button class="btn btn-sm" id="btnCloseDrawer">✕</button>
+        </div>
+        <div class="drawer-tabs">
+          <button class="drawer-tab active" data-dtab="network">#2 Network</button>
+          <button class="drawer-tab" data-dtab="containers">#4 Containers</button>
+          <button class="drawer-tab" data-dtab="permissions">#5 Perms & OS</button>
+        </div>
+        <div class="drawer-body" id="drawerBody"></div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
