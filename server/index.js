@@ -5,8 +5,76 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const crypto = require('crypto');
 const { URL } = require('url');
-const { WebSocketServer } = require('ws');
+
+function attachNativeWebSocketServer(server, pathFilter, onClientConnect) {
+  server.on('upgrade', (req, socket) => {
+    const reqUrl = req.url || '/';
+    if (pathFilter && !reqUrl.startsWith(pathFilter)) {
+      socket.destroy();
+      return;
+    }
+    const key = req.headers['sec-websocket-key'];
+    if (!key) {
+      socket.destroy();
+      return;
+    }
+    const acceptKey = crypto
+      .createHash('sha1')
+      .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
+      .digest('base64');
+
+    socket.write(
+      [
+        'HTTP/1.1 101 Switching Protocols',
+        'Upgrade: websocket',
+        'Connection: Upgrade',
+        `Sec-WebSocket-Accept: ${acceptKey}`,
+        '\r\n'
+      ].join('\r\n')
+    );
+
+    const client = {
+      readyState: 1,
+      send(strData) {
+        if (this.readyState !== 1 || socket.destroyed) return;
+        const payload = Buffer.from(String(strData), 'utf8');
+        const len = payload.length;
+        let header;
+        if (len < 126) {
+          header = Buffer.alloc(2);
+          header[0] = 0x81; // FIN + text frame
+          header[1] = len;
+        } else if (len < 65536) {
+          header = Buffer.alloc(4);
+          header[0] = 0x81;
+          header[1] = 126;
+          header.writeUInt16BE(len, 2);
+        } else {
+          header = Buffer.alloc(10);
+          header[0] = 0x81;
+          header[1] = 127;
+          header.writeBigUInt64BE(BigInt(len), 2);
+        }
+        try {
+          socket.write(Buffer.concat([header, payload]));
+        } catch {
+          this.readyState = 3;
+        }
+      }
+    };
+
+    socket.on('close', () => {
+      client.readyState = 3;
+    });
+    socket.on('error', () => {
+      client.readyState = 3;
+    });
+
+    onClientConnect(client);
+  });
+}
 
 const {
   USER_AGENT_PRESETS,
@@ -1610,11 +1678,9 @@ async function startBrowzServer(port = Number(process.env.PORT || 3000)) {
     sendJson(res, 404, { error: 'Not found', path: pathname });
   });
 
-  // WebSocket Server for real-time streaming of captured traffic & state updates
-  const wss = new WebSocketServer({ server, path: '/ws' });
-  wss.on('connection', (ws) => {
-    engine.wsClients.add(ws);
-    ws.on('close', () => engine.wsClients.delete(ws));
+  // Native zero-dependency WebSocket Server for real-time streaming of captured traffic & state updates
+  attachNativeWebSocketServer(server, '/ws', (client) => {
+    engine.wsClients.add(client);
   });
 
   return new Promise((resolve, reject) => {
