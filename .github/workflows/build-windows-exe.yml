@@ -1,0 +1,49 @@
+name: Build Windows EXE Installer
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Windows Installer (.exe) & Portable (.exe)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run build:win
+
+      - name: Upload EXE Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Browz-Windows-EXE
+          path: dist/*.exe
+
+      - name: Publish EXE to GitHub Releases (v1.0.0)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag = "v1.0.0"
+          gh release view $tag 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag dist/*.exe --clobber
+          } else {
+            gh release create $tag dist/*.exe --title "Browz Desktop Browser v1.0.0 (Windows .EXE)" --notes "Ready-to-install Windows Desktop Browser (.exe) with 100% Request/Response Capture, HAR/k6/JMeter export, Isolated Container Tabs, and Permission Firewall."
+          }

@@ -1,18 +1,23 @@
 {
   "name": "browz",
   "version": "1.0.0",
-  "description": "Minimal multi-tab desktop & web browser built for 100% network request/response capture, performance testing (HAR, k6, JMeter), isolated container sessions, and permission/hardware control.",
+  "description": "Browz — Multi-Tab Performance Capture & Control Browser",
+  "author": "Browz Team <browz@example.com>",
   "main": "electron/main.js",
   "scripts": {
     "start": "node server/index.js",
     "dev": "node server/index.js",
     "desktop": "electron .",
-    "build:installer": "npx electron-builder",
+    "build:win": "electron-builder --win nsis portable --x64",
+    "build:installer": "electron-builder",
     "test": "node test/verify.js"
   },
   "build": {
-    "appId": "com.browz.browser",
+    "appId": "com.browz.capturebrowser",
     "productName": "Browz",
+    "directories": {
+      "output": "dist"
+    },
     "files": [
       "electron/**/*",
       "server/**/*",
@@ -21,7 +26,24 @@
       "package.json"
     ],
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "portable",
+          "arch": ["x64"]
+        }
+      ],
+      "artifactName": "${productName}-${target}-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Browz Browser"
     },
     "mac": {
       "target": "dmg"
@@ -42,7 +64,8 @@
     "privacy"
   ],
   "license": "MIT",
-  "dependencies": {
-    "ws": "^8.18.0"
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
   }
 }

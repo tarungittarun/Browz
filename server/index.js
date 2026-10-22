@@ -1657,7 +1657,22 @@ async function startBrowzServer(port = Number(process.env.PORT || 3000)) {
       }
     }
 
-    // --- 9. SERVE BROWSER SHELL STATIC FILES (`public/`) ---
+    // --- 9. SERVE WINDOWS INSTALLER (.EXE) DIRECT DOWNLOAD ---
+    if (pathname === '/download/Browz-Setup-1.0.0.exe' || pathname === '/Browz-Setup-1.0.0.exe') {
+      const exePath = path.join(__dirname, '..', 'Browz-Setup-1.0.0.exe');
+      if (fs.existsSync(exePath)) {
+        const stat = fs.statSync(exePath);
+        res.writeHead(200, {
+          'Content-Type': 'application/vnd.microsoft.portable-executable',
+          'Content-Disposition': 'attachment; filename="Browz-Setup-1.0.0.exe"',
+          'Content-Length': String(stat.size),
+          'Cache-Control': 'no-cache'
+        });
+        return fs.createReadStream(exePath).pipe(res);
+      }
+    }
+
+    // --- 10. SERVE BROWSER SHELL STATIC FILES (`public/`) ---
     const filePath = pathname === '/' ? path.join(publicDir, 'index.html') : path.join(publicDir, pathname);
     if (filePath.startsWith(publicDir) && fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
       const ext = path.extname(filePath).toLowerCase();
