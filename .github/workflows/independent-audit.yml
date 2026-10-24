@@ -96,70 +96,43 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Compile Android Java with Strict Lint, Build DEX & Inspect Binary APK
+      - name: Setup Gradle 8.7
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      - name: Compile Release APK, Verify Cryptographic Signature, Audit Manifest & Inspect DEX Bytecode
         run: |
           set -e
-          BUILD_TOOLS=$(ls -1 "$ANDROID_HOME/build-tools" | sort -V | tail -n 1)
-          BT_DIR="$ANDROID_HOME/build-tools/$BUILD_TOOLS"
-          PLATFORM_DIR=$(ls -1d "$ANDROID_HOME/platforms/android-"* | sort -V | tail -n 1)
-          ANDROID_JAR="$PLATFORM_DIR/android.jar"
+          gradle assembleRelease -p android --no-daemon
+          cp android/app/build/outputs/apk/release/app-release.apk /tmp/Browz-Audit.apk
+          ls -lh /tmp/Browz-Audit.apk
 
-          mkdir -p /tmp/apk-audit/gen /tmp/apk-audit/obj /tmp/apk-audit/dex
+          BUILD_TOOLS_DIR=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -n 1)
+          echo "=== 1. Verify APK Cryptographic Signature (v1/v2/v3) ==="
+          "$BUILD_TOOLS_DIR/apksigner" verify --verbose /tmp/Browz-Audit.apk
 
-          "$BT_DIR/aapt" package -f -m \
-            -J /tmp/apk-audit/gen \
-            -M android/app/src/main/AndroidManifest.xml \
-            -I "$ANDROID_JAR"
-
-          javac -source 11 -target 11 -Xlint:deprecation \
-            -d /tmp/apk-audit/obj \
-            -classpath "$ANDROID_JAR" \
-            -sourcepath android/app/src/main/java:/tmp/apk-audit/gen \
-            android/app/src/main/java/com/browz/mobile/MainActivity.java
-
-          JAR_FILES=$(find /tmp/apk-audit/obj -name "*.class")
-          "$BT_DIR/d8" --release --min-api 24 --lib "$ANDROID_JAR" --output /tmp/apk-audit/dex $JAR_FILES
-
-          "$BT_DIR/aapt" package -f \
-            -M android/app/src/main/AndroidManifest.xml \
-            -I "$ANDROID_JAR" \
-            -F /tmp/apk-audit/unaligned.apk \
-            /tmp/apk-audit/dex
-
-          "$BT_DIR/zipalign" -f -p 4 /tmp/apk-audit/unaligned.apk /tmp/apk-audit/aligned.apk
-
-          keytool -genkeypair -v \
-            -keystore /tmp/apk-audit/audit.keystore \
-            -alias browzaudit \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass browz123456 -keypass browz123456 \
-            -dname "CN=Browz Audit, OU=Security, O=Browz, L=Bengaluru, S=KA, C=IN"
-
-          "$BT_DIR/apksigner" sign \
-            --ks /tmp/apk-audit/audit.keystore \
-            --ks-pass pass:browz123456 \
-            --key-pass pass:browz123456 \
-            --out /tmp/apk-audit/Browz-Audit.apk \
-            /tmp/apk-audit/aligned.apk
-
-          echo "=== 1. Verify APK Cryptographic Signature ==="
-          "$BT_DIR/apksigner" verify --verbose /tmp/apk-audit/Browz-Audit.apk
-
-          echo "=== 2. Verify Compiled APK Permissions (Must ONLY be INTERNET) ==="
-          PERMS=$("$BT_DIR/aapt" dump permissions /tmp/apk-audit/Browz-Audit.apk)
+          echo "=== 2. Verify Compiled Binary APK Permissions (Must ONLY be INTERNET) ==="
+          PERMS=$("$BUILD_TOOLS_DIR/aapt" dump permissions /tmp/Browz-Audit.apk)
           echo "$PERMS"
+          if echo "$PERMS" | grep -E "ACCESS_FINE_LOCATION|ACCESS_COARSE_LOCATION|CAMERA|RECORD_AUDIO|READ_CONTACTS|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|BLUETOOTH"; then
+            echo "FAIL: Forbidden hardware/OS tracking permission found in compiled APK!"
+            exit 1
+          fi
           PERM_COUNT=$(echo "$PERMS" | grep -c "uses-permission:" || true)
           if [ "$PERM_COUNT" -ne 1 ]; then
             echo "FAIL: Expected exactly 1 uses-permission (INTERNET), got $PERM_COUNT"
             exit 1
           fi
 
-          echo "=== 3. Inspect DEX Bytecode Strings for Security Primitives ==="
-          strings /tmp/apk-audit/dex/classes.dex | grep -q "escapeHtmlForMobile"
-          strings /tmp/apk-audit/dex/classes.dex | grep -q "escapeJsStringForMobile"
-          strings /tmp/apk-audit/dex/classes.dex | grep -q "markNative"
-          strings /tmp/apk-audit/dex/classes.dex | grep -q "removeAllCookies"
-          echo "PASS: Native Android APK bytecode & manifest passed all independent checks!"
+          echo "=== 3. Inspect Compiled classes.dex Bytecode Strings ==="
+          unzip -p /tmp/Browz-Audit.apk classes.dex > /tmp/classes.dex
+          strings /tmp/classes.dex | grep -q "escapeHtmlForMobile"
+          strings /tmp/classes.dex | grep -q "escapeJsStringForMobile"
+          strings /tmp/classes.dex | grep -q "markNative"
+          strings /tmp/classes.dex | grep -q "removeAllCookies"
+          strings /tmp/classes.dex | grep -q "deleteAllData"
+          echo "PASS: Native Android APK bytecode, DEX strings & binary manifest passed all independent checks!"
 
   # ===========================================================================
   # JOB 38: Final Independent Auditor Sign-Off Gate & Scorecard Summary
