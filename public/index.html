@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Browz</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- 1. TAB STRIP -->
+    <header class="tab-bar">
+      <div class="tabs-scroll" id="tabsContainer"></div>
+      <button class="tab-new-btn" id="btnNewTab" title="New Tab">+</button>
+      <div class="new-tab-controls">
+        <select id="newTabContainerSelect" class="select-input" title="Container Session for New Tab"></select>
+        <button class="btn btn-sm" id="btnNewGhostTab" title="Open RAM-Only Ghost Tab">New Ghost Tab</button>
+      </div>
+    </header>
+
+    <!-- 2. NAVIGATION TOOLBAR -->
+    <div class="nav-bar">
+      <div class="nav-btn-group">
+        <button class="icon-btn" id="btnBack" title="Back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+        </button>
+        <button class="icon-btn" id="btnForward" title="Forward">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
+        </button>
+        <button class="icon-btn" id="btnReload" title="Reload">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+        </button>
+        <button class="icon-btn" id="btnHome" title="Home">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+        </button>
+      </div>
+
+      <select id="activeTabContainerSelect" class="select-input" title="Active Tab Session Container"></select>
+
+      <form class="address-form" id="addressForm" style="position:relative;">
+        <div class="url-box">
+          <span class="shield-indicator" id="stealthBadge" title="Stealth & Anti-Fingerprinting Active — Click to configure">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            <span id="sslBadge">Protected</span>
+          </span>
+          <input
+            type="text"
+            id="urlInput"
+            class="url-input"
+            placeholder="Search privately or enter web address... (Ctrl+L)"
+            autocomplete="off"
+          />
+          <button type="button" class="icon-btn" id="btnFindInPage" title="Find in Page (Ctrl+F)" style="width:24px;height:24px;font-size:12px;">🔍</button>
+          <button type="button" class="icon-btn" id="btnBookmarkPage" title="Bookmark This Page" style="width:24px;height:24px;font-size:14px;">☆</button>
+        </div>
+        <div class="omnibox-suggestions" id="omniboxSuggestions"></div>
+      </form>
+
+      <div class="nav-btn-group">
+        <button class="icon-btn" id="btnZoomOut" title="Zoom Out" style="width:24px;font-weight:700;">−</button>
+        <span id="zoomLabel" style="font-size:11px;color:var(--text-muted);min-width:34px;text-align:center;cursor:pointer;" title="Click to Reset Zoom to 100%">100%</span>
+        <button class="icon-btn" id="btnZoomIn" title="Zoom In" style="width:24px;font-weight:700;">+</button>
+
+        <button class="btn" id="btnFitVideo" title="Fit Video on Page to Full Screen (Esc to Exit)">
+          🎬 Fit Video
+        </button>
+
+        <button class="btn" id="btnSecurityAudit" title="Run 24-Point Security, I/O & Untraceability Check">
+          Security Check
+        </button>
+
+        <button class="btn" id="btnRotateIdentity" title="Rotate OS/GPU/Canvas Fingerprint & Clear Session">
+          New Identity
+        </button>
+
+        <button class="btn" id="btnToggleCaptureDock" title="Toggle Network Traffic Capture Panel">
+          Traffic (<span id="navCaptureCount">0</span>)
+        </button>
+
+        <button class="btn" id="btnToggleDrawer" title="Open Shields, Network, Containers & Permissions Settings">
+          Shields &amp; Settings
+        </button>
+      </div>
+    </div>
+
+    <!-- 2B. BOOKMARKS / QUICK-LAUNCH BAR -->
+    <div class="bookmarks-bar" id="bookmarksBar"></div>
+
+    <!-- 2C. TOP LOADING PROGRESS BAR -->
+    <div class="loading-progress-wrap">
+      <div class="loading-progress-bar" id="browserLoadingBar"></div>
+    </div>
+
+    <!-- 3. MAIN WORKSPACE -->
+    <div class="workspace">
+      <div class="center-stack viewport-maximized" id="centerStack">
+        <!-- Find in Page Bar (Ctrl+F) -->
+        <div class="find-bar" id="findBar">
+          <input type="text" id="findInput" class="find-input" placeholder="Find in page..." autocomplete="off" />
+          <button type="button" class="btn btn-sm" id="btnFindPrev" title="Previous Match (Shift+Enter)">↑</button>
+          <button type="button" class="btn btn-sm" id="btnFindNext" title="Next Match (Enter)">↓</button>
+          <button type="button" class="icon-btn" id="btnFindClose" title="Close Find Bar (Esc)" style="width:24px;height:24px;">✕</button>
+        </div>
+
+        <!-- Browser Tab Viewports -->
+        <div class="browser-viewport" id="browserViewport"></div>
+
+        <!-- 4. DEVTOOLS-STYLE NETWORK CAPTURE DOCK -->
+        <section class="capture-dock" id="captureDock">
+          <div class="dock-resize-handle" id="dockResizeHandle" title="Drag to resize Traffic Panel"></div>
+          <div class="metrics-strip" id="metricsStrip">
+            <button class="rec-pill" id="btnRecordToggle" title="Toggle Request/Response Capture">
+              <span class="rec-dot"></span>
+              <span id="recStatusText">REC</span>
+            </button>
+            <div class="metric-item"><span class="metric-label">Requests:</span><span class="metric-val" id="mTotal">0</span></div>
+            <div class="metric-item"><span class="metric-label">2xx:</span><span class="metric-val" id="m2xx">0</span></div>
+            <div class="metric-item"><span class="metric-label">4xx/5xx:</span><span class="metric-val" id="mErr">0 (0%)</span></div>
+            <div class="metric-item"><span class="metric-label">Blocked:</span><span class="metric-val" id="mBlocked">0</span></div>
+            <div class="metric-item"><span class="metric-label">Avg:</span><span class="metric-val" id="mAvg">0 ms</span></div>
+            <div class="metric-item"><span class="metric-label">P50:</span><span class="metric-val" id="mP50">0 ms</span></div>
+            <div class="metric-item"><span class="metric-label">P95:</span><span class="metric-val" id="mP95">0 ms</span></div>
+            <div class="metric-item"><span class="metric-label">P99:</span><span class="metric-val" id="mP99">0 ms</span></div>
+            <div class="metric-item"><span class="metric-label">RPS:</span><span class="metric-val" id="mRps">0/s</span></div>
+            <div class="metric-item"><span class="metric-label">Transferred:</span><span class="metric-val" id="mBytes">0 KB</span></div>
+            <div style="margin-left:auto;display:flex;gap:6px;align-items:center;">
+              <select id="throttleSelect" class="select-input" title="Network Throttling">
+                <option value="none">No Throttling</option>
+                <option value="fast4g">Fast 4G (40ms)</option>
+                <option value="slow3g">Slow 3G (300ms)</option>
+                <option value="high_latency">High Latency (180ms)</option>
+                <option value="offline">Offline</option>
+              </select>
+              <button class="btn btn-sm" id="btnMaximizeDock">Expand</button>
+              <button class="btn btn-sm" id="btnCloseDock">Close</button>
+            </div>
+          </div>
+
+          <div class="capture-toolbar">
+            <div class="toolbar-left">
+              <input
+                type="text"
+                id="filterSearch"
+                class="text-input"
+                placeholder="Filter URL, header, status, body…"
+                style="width: 190px;"
+              />
+              <select id="filterScope" class="select-input">
+                <option value="all">All Tabs</option>
+                <option value="active">Active Tab</option>
+              </select>
+              <select id="filterMethod" class="select-input">
+                <option value="ALL">All Methods</option>
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+                <option value="PUT">PUT</option>
+                <option value="DELETE">DELETE</option>
+              </select>
+              <select id="filterType" class="select-input">
+                <option value="ALL">All Types</option>
+                <option value="Document">Document</option>
+                <option value="Fetch">Fetch</option>
+                <option value="XHR">XHR</option>
+                <option value="Replay">Replay</option>
+                <option value="LoadBurst">LoadBurst</option>
+              </select>
+              <select id="filterStatus" class="select-input">
+                <option value="ALL">All Status</option>
+                <option value="2xx">2xx OK</option>
+                <option value="3xx">3xx Redirect</option>
+                <option value="4xx">4xx Error</option>
+                <option value="5xx">5xx Error</option>
+                <option value="BLOCKED">Blocked</option>
+              </select>
+              <button class="btn btn-sm" id="btnClearCapture">Clear</button>
+              <button class="btn btn-sm" id="btnOpenComposer">Composer / Load Burst</button>
+            </div>
+
+            <div class="toolbar-right">
+              <span style="font-size:11px;color:var(--text-muted);">Export:</span>
+              <button class="btn btn-sm btn-primary" onclick="exportCapture('har')">HAR</button>
+              <button class="btn btn-sm" onclick="exportCapture('k6')">k6 (.js)</button>
+              <button class="btn btn-sm" onclick="exportCapture('jmeter')">JMeter (.jmx)</button>
+              <button class="btn btn-sm" onclick="exportCapture('csv')">CSV</button>
+              <button class="btn btn-sm" onclick="exportCapture('json')">JSON</button>
+            </div>
+          </div>
+
+          <div class="capture-body">
+            <div class="requests-table-wrap">
+              <table class="req-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Session</th>
+                    <th>Method</th>
+                    <th>Status</th>
+                    <th>URL</th>
+                    <th>Type</th>
+                    <th>Size</th>
+                    <th>Time</th>
+                    <th>Waterfall</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="requestsTableBody"></tbody>
+              </table>
+            </div>
+
+            <aside class="inspector-pane hidden" id="inspectorPane">
+              <div class="inspector-tabs">
+                <button class="insp-tab active" data-itab="headers">Headers</button>
+                <button class="insp-tab" data-itab="payload">Payload</button>
+                <button class="insp-tab" data-itab="response">Response</button>
+                <button class="insp-tab" data-itab="timings">Timings</button>
+                <button class="insp-tab" data-itab="cookies">Cookies</button>
+                <button class="insp-tab" data-itab="replay">Replay / Burst</button>
+                <button class="btn btn-sm" style="margin-left:auto;" id="btnCloseInspector">✕</button>
+              </div>
+              <div class="inspector-content" id="inspectorContent"></div>
+            </aside>
+          </div>
+        </section>
+      </div>
+
+      <!-- 5. SHIELDS & SETTINGS DRAWER -->
+      <aside class="control-drawer hidden" id="controlDrawer">
+        <div class="drawer-header">
+          <strong style="font-size:12.5px;font-weight:600;">Shields &amp; Browser Settings</strong>
+          <button class="btn btn-sm" id="btnCloseDrawer">✕</button>
+        </div>
+        <div class="drawer-tabs">
+          <button class="drawer-tab active" data-dtab="stealth">Stealth</button>
+          <button class="drawer-tab" data-dtab="io">I/O &amp; Wi-Fi</button>
+          <button class="drawer-tab" data-dtab="network">Network</button>
+          <button class="drawer-tab" data-dtab="containers">Sessions</button>
+          <button class="drawer-tab" data-dtab="permissions">Permissions</button>
+        </div>
+        <div class="drawer-body" id="drawerBody"></div>
+      </aside>
+    </div>
+  </div>
+
+  <div id="browzToast" class="browz-toast"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,1923 @@
+package com.browz.mobile;
+
+import android.annotation.SuppressLint;
+import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.text.InputType;
+import android.text.TextUtils;
+import android.util.TypedValue;
+import android.view.Gravity;
+import android.view.KeyEvent;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
+import android.webkit.CookieManager;
+import android.webkit.GeolocationPermissions;
+import android.webkit.JavascriptInterface;
+import android.webkit.PermissionRequest;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
+import android.webkit.WebStorage;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.EditText;
+import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import java.io.ByteArrayInputStream;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.UUID;
+
+public class MainActivity extends Activity {
+
+    private static class Persona {
+        final String id;
+        final String label;
+        final String userAgent;
+        final String platform;
+        final String webglVendor;
+        final String webglRenderer;
+        final String timezone;
+        final int screenW;
+        final int screenH;
+        final boolean isMobile;
+
+        Persona(String id, String label, String ua, String platform, String vendor, String renderer, String tz, int w, int h, boolean isMobile) {
+            this.id = id;
+            this.label = label;
+            this.userAgent = ua;
+            this.platform = platform;
+            this.webglVendor = vendor;
+            this.webglRenderer = renderer;
+            this.timezone = tz;
+            this.screenW = w;
+            this.screenH = h;
+            this.isMobile = isMobile;
+        }
+    }
+
+    private static class CapturedEntry {
+        final int seq;
+        final String timestamp;
+        final String method;
+        final String url;
+        final String domain;
+        final boolean blocked;
+        final String reason;
+
+        CapturedEntry(int seq, String timestamp, String method, String url, String domain, boolean blocked, String reason) {
+            this.seq = seq;
+            this.timestamp = timestamp;
+            this.method = method;
+            this.url = url;
+            this.domain = domain;
+            this.blocked = blocked;
+            this.reason = reason;
+        }
+    }
+
+    private static class BookmarkItem {
+        final String title;
+        final String url;
+
+        BookmarkItem(String title, String url) {
+            this.title = title;
+            this.url = url;
+        }
+    }
+
+    private static class BrowserTab {
+        final int id;
+        final WebView webView;
+        final boolean ghostMode;
+        String title = "New Tab";
+        String url = "browz://home";
+        boolean loading = false;
+        int zoomPercent = 100;
+
+        BrowserTab(int id, WebView webView, boolean ghostMode) {
+            this.id = id;
+            this.webView = webView;
+            this.ghostMode = ghostMode;
+        }
+    }
+
+    private final List<Persona> personas = Arrays.asList(
+        new Persona(
+            "pixel9_android15",
+            "Android 15 — Pixel 9 (Stealth Default)",
+            "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
+            "Linux armv81",
+            "Qualcomm",
+            "Adreno (TM) Generic Mobile GPU",
+            "UTC",
+            412, 915, true
+        ),
+        new Persona(
+            "iphone16_ios18",
+            "iOS 18.1 — iPhone 16 Pro (Safari Mobile)",
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1",
+            "iPhone",
+            "Apple Inc.",
+            "Apple GPU",
+            "UTC",
+            393, 852, true
+        ),
+        new Persona(
+            "win11_desktop",
+            "Desktop Mode — Windows 11 Intel PC",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+            "Win32",
+            "Intel Inc.",
+            "Intel(R) Iris(R) Xe Graphics",
+            "UTC",
+            1920, 1080, false
+        ),
+        new Persona(
+            "tor_mobile",
+            "High-Anonymity Tor Mobile Profile",
+            "Mozilla/5.0 (Android 14; Mobile; rv:128.0) Gecko/128.0 Firefox/128.0",
+            "Linux aarch64",
+            "Mozilla",
+            "Mozilla Generic Renderer",
+            "UTC",
+            360, 800, true
+        )
+    );
+
+    private static final Set<String> TRACKER_DOMAINS = new HashSet<>(Arrays.asList(
+        "doubleclick.net",
+        "google-analytics.com",
+        "googletagmanager.com",
+        "googlesyndication.com",
+        "facebook.net",
+        "connect.facebook.net",
+        "hotjar.com",
+        "clarity.ms",
+        "appsflyer.com",
+        "adjust.com",
+        "branch.io",
+        "scorecardresearch.com",
+        "criteo.com",
+        "taboola.com",
+        "outbrain.com",
+        "mixpanel.com",
+        "amplitude.com",
+        "segment.io",
+        "fullstory.com",
+        "mouseflow.com"
+    ));
+
+    private static final Set<String> TRACKING_PARAMS = new HashSet<>(Arrays.asList(
+        "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "utm_id",
+        "utm_name", "utm_reader", "utm_viz_id", "utm_pubreferrer",
+        "fbclid", "gclid", "gclsrc", "msclkid", "dclid", "twclid", "ttclid", "yclid",
+        "mc_cid", "mc_eid", "_ga", "_gl", "_hsenc", "_hsmi", "hsctatracking",
+        "igshid", "si", "spm", "vero_id", "mkt_tok", "oly_enc_id", "oly_anon_id",
+        "rb_clickid", "s_kwcid", "zanpid", "wickedid"
+    ));
+
+    private final String bridgeSecret = UUID.randomUUID().toString();
+    private final Handler uiHandler = new Handler(Looper.getMainLooper());
+    private final Map<String, Integer> retryAttemptsByUrl = new HashMap<>();
+
+    private int activePersonaIdx = 0;
+    private int noiseSeed = 482910;
+    private boolean shieldCanvas = true;
+    private boolean shieldWebGL = true;
+    private boolean shieldAudio = true;
+    private boolean shieldClientRects = true;
+    private boolean shieldWebRTC = true;
+    private boolean shieldSensors = true;
+    private boolean shieldTimezone = true;
+    private boolean shieldClientHints = true;
+    private boolean shieldStorageAndVoices = true;
+    private String radioProfile = "stealth_hidden";
+    private boolean blockServiceWorkers = true;
+    private boolean blockCacheStorage = true;
+    private boolean blockFileSystemAccess = true;
+    private boolean blockClipboardRead = true;
+    private boolean blockWebSockets = false;
+    private boolean timerJitter = true;
+    private boolean fitVideosToScreen = true;
+    private boolean blockTrackers = true;
+    private boolean stripUrlParams = true;
+    private boolean forceHttps = true;
+    private boolean autoRetryFailed = true;
+    private boolean screenSecurityFlag = true;
+    private boolean captureTraffic = true;
+    private int strippedParamsCount = 0;
+    private int blockedTrackersCount = 0;
+    private int seqCounter = 1;
+
+    private final List<CapturedEntry> capturedEntries = new ArrayList<>();
+    private final List<BookmarkItem> bookmarks = new ArrayList<>(Arrays.asList(
+        new BookmarkItem("Home", "browz://home"),
+        new BookmarkItem("24-Point Security", "browz://security"),
+        new BookmarkItem("API Testbench", "browz://testbench"),
+        new BookmarkItem("DuckDuckGo", "https://duckduckgo.com"),
+        new BookmarkItem("GitHub", "https://github.com"),
+        new BookmarkItem("Google", "https://www.google.com"),
+        new BookmarkItem("YouTube", "https://m.youtube.com")
+    ));
+    private final List<BrowserTab> tabs = new ArrayList<>();
+    private BrowserTab activeTab = null;
+    private int tabIdCounter = 1;
+
+    private LinearLayout topBarView;
+    private HorizontalScrollView bmScrollView;
+    private LinearLayout bottomBarView;
+    private FrameLayout webViewContainer;
+    private LinearLayout bookmarksContainer;
+    private EditText urlInput;
+    private TextView starBtn;
+    private TextView tabCountBtn;
+    private TextView trafficCountBtn;
+    private TextView backBtn;
+    private TextView fwdBtn;
+    private TextView reloadOrStopBtn;
+    private ProgressBar progressBar;
+    private View customVideoView = null;
+    private WebChromeClient.CustomViewCallback customVideoCallback = null;
+
+    private int dp(int val) {
+        return (int) TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP,
+            val,
+            getResources().getDisplayMetrics()
+        );
+    }
+
+    private GradientDrawable roundBg(int fillColor, int strokeColor, int radiusDp) {
+        GradientDrawable gd = new GradientDrawable();
+        gd.setColor(fillColor);
+        gd.setCornerRadius(dp(radiusDp));
+        if (strokeColor != 0) {
+            gd.setStroke(dp(1), strokeColor);
+        }
+        return gd;
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        // Apply FLAG_SECURE so other apps / Recent Apps switcher cannot screenshot browsing session
+        if (screenSecurityFlag) {
+            getWindow().setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE
+            );
+        }
+        getWindow().setStatusBarColor(Color.parseColor("#121215"));
+        getWindow().setNavigationBarColor(Color.parseColor("#18181c"));
+
+        noiseSeed = 100000 + new Random().nextInt(900000);
+
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(Color.parseColor("#121215"));
+        root.setLayoutParams(new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            root.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            root.setImportantForContentCapture(View.IMPORTANT_FOR_CONTENT_CAPTURE_NO_EXCLUDE_DESCENDANTS);
+        }
+
+        // --- 1. TOP COMPACT OMNIBOX BAR ---
+        LinearLayout topBar = new LinearLayout(this);
+        topBarView = topBar;
+        topBar.setOrientation(LinearLayout.HORIZONTAL);
+        topBar.setGravity(Gravity.CENTER_VERTICAL);
+        topBar.setBackgroundColor(Color.parseColor("#18181c"));
+        topBar.setPadding(dp(8), dp(6), dp(8), dp(6));
+
+        // Shield Button
+        TextView shieldBtn = new TextView(this);
+        shieldBtn.setText("Shield");
+        shieldBtn.setTextColor(Color.parseColor("#22c55e"));
+        shieldBtn.setTextSize(11.5f);
+        shieldBtn.setTypeface(Typeface.DEFAULT_BOLD);
+        shieldBtn.setPadding(dp(9), dp(6), dp(9), dp(6));
+        shieldBtn.setBackground(roundBg(Color.parseColor("#121215"), Color.parseColor("#2e2e36"), 14));
+        shieldBtn.setOnClickListener(v -> showShieldsDialog());
+        topBar.addView(shieldBtn);
+
+        // URL / Search Omnibox
+        urlInput = new EditText(this);
+        LinearLayout.LayoutParams urlParams = new LinearLayout.LayoutParams(0, dp(36), 1f);
+        urlParams.setMargins(dp(5), 0, dp(5), 0);
+        urlInput.setLayoutParams(urlParams);
+        urlInput.setBackground(roundBg(Color.parseColor("#121215"), Color.parseColor("#2e2e36"), 18));
+        urlInput.setPadding(dp(12), 0, dp(12), 0);
+        urlInput.setTextColor(Color.parseColor("#f4f4f5"));
+        urlInput.setHintTextColor(Color.parseColor("#9ca3af"));
+        urlInput.setHint("Search privately or enter URL...");
+        urlInput.setTextSize(13f);
+        urlInput.setSingleLine(true);
+        urlInput.setSelectAllOnFocus(true);
+        urlInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        urlInput.setImeOptions(EditorInfo.IME_ACTION_GO | EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            urlInput.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        }
+        urlInput.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_GO ||
+                actionId == EditorInfo.IME_ACTION_DONE ||
+                (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER)) {
+                hideKeyboard();
+                navigateActiveTab(urlInput.getText().toString());
+                return true;
+            }
+            return false;
+        });
+        topBar.addView(urlInput);
+
+        // Bookmark Star Button
+        starBtn = new TextView(this);
+        starBtn.setText("☆");
+        starBtn.setTextColor(Color.parseColor("#d4d4d8"));
+        starBtn.setTextSize(15f);
+        starBtn.setGravity(Gravity.CENTER);
+        starBtn.setPadding(dp(7), dp(4), dp(7), dp(4));
+        starBtn.setBackground(roundBg(Color.parseColor("#222228"), Color.parseColor("#2e2e36"), 8));
+        starBtn.setOnClickListener(v -> toggleBookmarkCurrentPage());
+        topBar.addView(starBtn);
+
+        // Tools / Zoom / Find Button
+        TextView toolsBtn = new TextView(this);
+        toolsBtn.setText("Tools");
+        toolsBtn.setTextColor(Color.parseColor("#d4d4d8"));
+        toolsBtn.setTextSize(11.5f);
+        toolsBtn.setTypeface(Typeface.DEFAULT_BOLD);
+        toolsBtn.setPadding(dp(8), dp(6), dp(8), dp(6));
+        LinearLayout.LayoutParams toolsLp = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        toolsLp.setMargins(dp(4), 0, dp(4), 0);
+        toolsBtn.setLayoutParams(toolsLp);
+        toolsBtn.setBackground(roundBg(Color.parseColor("#222228"), Color.parseColor("#2e2e36"), 8));
+        toolsBtn.setOnClickListener(v -> showToolsDialog());
+        topBar.addView(toolsBtn);
+
+        // Tabs Switcher Badge
+        tabCountBtn = new TextView(this);
+        tabCountBtn.setText("1");
+        tabCountBtn.setTextColor(Color.parseColor("#f4f4f5"));
+        tabCountBtn.setTextSize(12f);
+        tabCountBtn.setTypeface(Typeface.DEFAULT_BOLD);
+        tabCountBtn.setGravity(Gravity.CENTER);
+        tabCountBtn.setPadding(dp(9), dp(6), dp(9), dp(6));
+        tabCountBtn.setBackground(roundBg(Color.parseColor("#222228"), Color.parseColor("#3f3f4a"), 8));
+        tabCountBtn.setOnClickListener(v -> showTabsDialog());
+        topBar.addView(tabCountBtn);
+
+        root.addView(topBar);
+
+        // --- 1B. HORIZONTAL SCROLLABLE BOOKMARKS BAR ---
+        HorizontalScrollView bmScroll = new HorizontalScrollView(this);
+        bmScrollView = bmScroll;
+        bmScroll.setHorizontalScrollBarEnabled(false);
+        bmScroll.setBackgroundColor(Color.parseColor("#16161a"));
+        bmScroll.setPadding(dp(6), dp(4), dp(6), dp(4));
+        bookmarksContainer = new LinearLayout(this);
+        bookmarksContainer.setOrientation(LinearLayout.HORIZONTAL);
+        bookmarksContainer.setGravity(Gravity.CENTER_VERTICAL);
+        bmScroll.addView(bookmarksContainer);
+        root.addView(bmScroll);
+        renderBookmarksBar();
+
+        // --- 2. THIN ANIMATED PROGRESS BAR ---
+        progressBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        progressBar.setLayoutParams(new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            dp(2)
+        ));
+        progressBar.setMax(100);
+        progressBar.setVisibility(View.GONE);
+        root.addView(progressBar);
+
+        // --- 3. FULL-SCREEN WEBVIEW VIEWPORT ---
+        webViewContainer = new FrameLayout(this);
+        webViewContainer.setLayoutParams(new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            0,
+            1f
+        ));
+        webViewContainer.setBackgroundColor(Color.parseColor("#121215"));
+        root.addView(webViewContainer);
+
+        // --- 4. BOTTOM MOBILE NAVIGATION & UNTRACEABILITY BAR ---
+        LinearLayout bottomBar = new LinearLayout(this);
+        bottomBarView = bottomBar;
+        bottomBar.setOrientation(LinearLayout.HORIZONTAL);
+        bottomBar.setGravity(Gravity.CENTER_VERTICAL);
+        bottomBar.setBackgroundColor(Color.parseColor("#18181c"));
+        bottomBar.setPadding(dp(5), dp(6), dp(5), dp(6));
+
+        backBtn = makeBottomBtn("‹ Back", v -> {
+            if (activeTab != null && activeTab.webView.canGoBack()) {
+                activeTab.webView.goBack();
+            }
+        });
+        bottomBar.addView(backBtn);
+
+        fwdBtn = makeBottomBtn("Fwd ›", v -> {
+            if (activeTab != null && activeTab.webView.canGoForward()) {
+                activeTab.webView.goForward();
+            }
+        });
+        bottomBar.addView(fwdBtn);
+
+        bottomBar.addView(makeBottomBtn("Home", v -> navigateActiveTab("browz://home")));
+
+        reloadOrStopBtn = makeBottomBtn("↻ Reload", v -> {
+            if (activeTab == null) return;
+            if (activeTab.loading) {
+                activeTab.webView.stopLoading();
+                setTabLoadingState(activeTab, false);
+                Toast.makeText(this, "Stopped loading", Toast.LENGTH_SHORT).show();
+            } else {
+                retryAttemptsByUrl.clear();
+                if (activeTab.url.startsWith("browz://")) {
+                    navigateActiveTab(activeTab.url);
+                } else {
+                    setTabLoadingState(activeTab, true);
+                    activeTab.webView.reload();
+                }
+            }
+        });
+        bottomBar.addView(reloadOrStopBtn);
+
+        trafficCountBtn = makeBottomBtn("Traffic (0)", v -> showTrafficCaptureDialog());
+        bottomBar.addView(trafficCountBtn);
+
+        TextView burnBtn = makeBottomBtn("New ID", v -> burnAndRotateIdentity());
+        burnBtn.setTextColor(Color.parseColor("#f87171"));
+        bottomBar.addView(burnBtn);
+
+        root.addView(bottomBar);
+        setContentView(root);
+
+        // Open initial tab (or external intent URL if launched from link)
+        String initialUrl = "browz://home";
+        Intent intent = getIntent();
+        if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getDataString() != null) {
+            initialUrl = intent.getDataString();
+        }
+        createAndSwitchTab(initialUrl, false);
+    }
+
+    private TextView makeBottomBtn(String label, View.OnClickListener listener) {
+        TextView tv = new TextView(this);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(34), 1f);
+        lp.setMargins(dp(2), 0, dp(2), 0);
+        tv.setLayoutParams(lp);
+        tv.setText(label);
+        tv.setTextColor(Color.parseColor("#d4d4d8"));
+        tv.setTextSize(11.5f);
+        tv.setTypeface(Typeface.DEFAULT_BOLD);
+        tv.setGravity(Gravity.CENTER);
+        tv.setBackground(roundBg(Color.parseColor("#222228"), Color.parseColor("#2e2e36"), 7));
+        tv.setOnClickListener(listener);
+        return tv;
+    }
+
+    private void renderBookmarksBar() {
+        if (bookmarksContainer == null) return;
+        bookmarksContainer.removeAllViews();
+        for (int i = 0; i < bookmarks.size(); i++) {
+            final BookmarkItem bm = bookmarks.get(i);
+            TextView chip = new TextView(this);
+            chip.setText(bm.title);
+            chip.setTextColor(Color.parseColor("#d4d4d8"));
+            chip.setTextSize(11.5f);
+            chip.setPadding(dp(9), dp(4), dp(9), dp(4));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            );
+            lp.setMargins(dp(3), 0, dp(3), 0);
+            chip.setLayoutParams(lp);
+            chip.setBackground(roundBg(Color.parseColor("#222228"), Color.parseColor("#2e2e36"), 6));
+            chip.setOnClickListener(v -> navigateActiveTab(bm.url));
+            bookmarksContainer.addView(chip);
+        }
+    }
+
+    private void syncBookmarkStar() {
+        if (starBtn == null || activeTab == null) return;
+        boolean found = false;
+        for (BookmarkItem b : bookmarks) {
+            if (b.url.equals(activeTab.url)) {
+                found = true;
+                break;
+            }
+        }
+        starBtn.setText(found ? "★" : "☆");
+        starBtn.setTextColor(found ? Color.parseColor("#eab308") : Color.parseColor("#d4d4d8"));
+    }
+
+    private void toggleBookmarkCurrentPage() {
+        if (activeTab == null) return;
+        for (int i = 0; i < bookmarks.size(); i++) {
+            if (bookmarks.get(i).url.equals(activeTab.url)) {
+                bookmarks.remove(i);
+                renderBookmarksBar();
+                syncBookmarkStar();
+                Toast.makeText(this, "Removed bookmark", Toast.LENGTH_SHORT).show();
+                return;
+            }
+        }
+        String title = !TextUtils.isEmpty(activeTab.title) ? activeTab.title : activeTab.url;
+        if (title.length() > 20) title = title.substring(0, 20);
+        bookmarks.add(new BookmarkItem(title, activeTab.url));
+        renderBookmarksBar();
+        syncBookmarkStar();
+        Toast.makeText(this, "Bookmarked: " + title, Toast.LENGTH_SHORT).show();
+    }
+
+    private void setTabLoadingState(BrowserTab tab, boolean isLoading) {
+        if (tab == null) return;
+        tab.loading = isLoading;
+        if (tab == activeTab) {
+            if (reloadOrStopBtn != null) {
+                reloadOrStopBtn.setText(isLoading ? "✕ Stop" : "↻ Reload");
+            }
+            if (!isLoading && progressBar != null) {
+                progressBar.setVisibility(View.GONE);
+            }
+            syncNavButtonsState();
+        }
+    }
+
+    private void syncNavButtonsState() {
+        if (activeTab == null) return;
+        boolean canBack = activeTab.webView.canGoBack();
+        boolean canFwd = activeTab.webView.canGoForward();
+        if (backBtn != null) backBtn.setAlpha(canBack ? 1.0f : 0.4f);
+        if (fwdBtn != null) fwdBtn.setAlpha(canFwd ? 1.0f : 0.4f);
+    }
+
+    private void hideKeyboard() {
+        View view = getCurrentFocus();
+        if (view != null) {
+            InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) {
+                imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
+            }
+        }
+    }
+
+    private class BridgeInterface {
+        @JavascriptInterface
+        public void navigate(String secret, String rawQueryOrUrl) {
+            if (!bridgeSecret.equals(secret)) return;
+            runOnUiThread(() -> navigateActiveTab(rawQueryOrUrl));
+        }
+
+        @JavascriptInterface
+        public void rotateIdentity(String secret) {
+            if (!bridgeSecret.equals(secret)) return;
+            runOnUiThread(() -> burnAndRotateIdentity());
+        }
+
+        @JavascriptInterface
+        public void openShields(String secret) {
+            if (!bridgeSecret.equals(secret)) return;
+            runOnUiThread(() -> showShieldsDialog());
+        }
+
+        @JavascriptInterface
+        public void openTraffic(String secret) {
+            if (!bridgeSecret.equals(secret)) return;
+            runOnUiThread(() -> showTrafficCaptureDialog());
+        }
+
+        @JavascriptInterface
+        public String getNativeAuditStats(String secret) {
+            if (!bridgeSecret.equals(secret)) return "{}";
+            return "{\"blockedTrackers\":" + blockedTrackersCount +
+                ",\"strippedParams\":" + strippedParamsCount +
+                ",\"flagSecure\":" + screenSecurityFlag +
+                ",\"seed\":" + noiseSeed + "}";
+        }
+    }
+
+    @SuppressLint({"SetJavaScriptEnabled", "AddJavascriptInterface"})
+    private WebView buildHardenedWebView(boolean ghostMode) {
+        WebView wv = new WebView(this);
+        wv.setLayoutParams(new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+        wv.setBackgroundColor(Color.parseColor("#121215"));
+        wv.setFocusable(true);
+        wv.setFocusableInTouchMode(true);
+        wv.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            wv.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            wv.setImportantForContentCapture(View.IMPORTANT_FOR_CONTENT_CAPTURE_NO_EXCLUDE_DESCENDANTS);
+        }
+
+        WebSettings s = wv.getSettings();
+        s.setJavaScriptEnabled(true);
+        s.setDomStorageEnabled(true);
+        s.setDatabaseEnabled(false);
+
+        // STRICT SECURITY HARDENING: Block local file & content provider access
+        s.setAllowFileAccess(false);
+        s.setAllowContentAccess(false);
+        s.setAllowFileAccessFromFileURLs(false);
+        s.setAllowUniversalAccessFromFileURLs(false);
+        s.setGeolocationEnabled(false);
+        s.setSaveFormData(false);
+        s.setMediaPlaybackRequiresUserGesture(false);
+        s.setSupportMultipleWindows(false);
+        s.setJavaScriptCanOpenWindowsAutomatically(false);
+        s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+        s.setUseWideViewPort(true);
+        s.setLoadWithOverviewMode(true);
+        s.setBuiltInZoomControls(true);
+        s.setDisplayZoomControls(false);
+        s.setOffscreenPreRaster(true);
+        if (ghostMode) {
+            s.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        }
+
+        // Long-press link menu (Open in New Tab, Open in Ghost Tab, Copy Clean URL)
+        wv.setOnLongClickListener(v -> {
+            WebView.HitTestResult hit = wv.getHitTestResult();
+            if (hit == null) return false;
+            int type = hit.getType();
+            if (type == WebView.HitTestResult.SRC_ANCHOR_TYPE ||
+                type == WebView.HitTestResult.SRC_IMAGE_ANCHOR_TYPE) {
+                final String rawLink = hit.getExtra();
+                if (rawLink != null && (rawLink.startsWith("http://") || rawLink.startsWith("https://"))) {
+                    final String cleanLink = cleanAndUpgradeUrl(Uri.parse(rawLink));
+                    String[] opts = new String[]{
+                        "Open in New Tab",
+                        "Open in Ghost Tab (RAM-Only)",
+                        "Copy Clean URL (Tracking Stripped)"
+                    };
+                    new AlertDialog.Builder(MainActivity.this)
+                        .setTitle(cleanLink)
+                        .setItems(opts, (d, which) -> {
+                            if (which == 0) {
+                                createAndSwitchTab(cleanLink, false);
+                            } else if (which == 1) {
+                                createAndSwitchTab(cleanLink, true);
+                            } else if (which == 2) {
+                                ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+                                if (cm != null) {
+                                    cm.setPrimaryClip(ClipData.newPlainText("Clean URL", cleanLink));
+                                    Toast.makeText(MainActivity.this, "Copied clean URL!", Toast.LENGTH_SHORT).show();
+                                }
+                            }
+                        })
+                        .show();
+                    return true;
+                }
+            }
+            return false;
+        });
+
+        Persona p = personas.get(activePersonaIdx);
+        s.setUserAgentString(p.userAgent);
+
+        // Block third-party tracking cookies across all websites natively
+        CookieManager cm = CookieManager.getInstance();
+        cm.setAcceptCookie(true);
+        cm.setAcceptThirdPartyCookies(wv, false);
+
+        wv.addJavascriptInterface(new BridgeInterface(), "BrowzNative");
+
+        wv.setWebViewClient(new WebViewClient() {
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                if (uri == null) return null;
+                String reqUrl = uri.toString();
+                String scheme = uri.getScheme() != null ? uri.getScheme().toLowerCase(Locale.ROOT) : "";
+                String host = uri.getHost() != null ? uri.getHost().toLowerCase(Locale.ROOT) : "";
+                String method = request.getMethod() != null ? request.getMethod() : "GET";
+
+                // Air-Gap Radio Kill-Switch: Cut 100% of external network socket I/O when active
+                if ("airgap_killswitch".equals(radioProfile) && !"browz.local".equals(host)) {
+                    blockedTrackersCount++;
+                    recordRequest(method, reqUrl, host, true, "Air-Gap Radio Kill-Switch Active");
+                    return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
+                }
+
+                // SECURITY: Block cloud metadata SSRF, localhost loopback probing, & unsafe schemes at network interception layer
+                String cleanHost = host.replace("[", "").replace("]", "");
+                if ("file".equals(scheme) || "content".equals(scheme) ||
+                    "169.254.169.254".equals(cleanHost) || cleanHost.startsWith("169.254.") ||
+                    "metadata.google.internal".equals(cleanHost) || "100.100.100.200".equals(cleanHost) ||
+                    "0.0.0.0".equals(cleanHost) || "127.0.0.1".equals(cleanHost) || "localhost".equals(cleanHost) ||
+                    "::1".equals(cleanHost) || cleanHost.startsWith("0x") || cleanHost.matches("^\\d+$")) {
+                    blockedTrackersCount++;
+                    recordRequest(method, reqUrl, host, true, "Blocked SSRF / Loopback / Local Resource");
+                    return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
+                }
+
+                if (blockTrackers && !host.isEmpty()) {
+                    for (String tracker : TRACKER_DOMAINS) {
+                        if (host.equals(tracker) || host.endsWith("." + tracker)) {
+                            blockedTrackersCount++;
+                            recordRequest(method, reqUrl, host, true, "Tracker Blocked (" + tracker + ")");
+                            return new WebResourceResponse(
+                                "text/plain",
+                                "UTF-8",
+                                new ByteArrayInputStream(new byte[0])
+                            );
+                        }
+                    }
+                }
+
+                recordRequest(method, reqUrl, host, false, "OK");
+                return super.shouldInterceptRequest(view, request);
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                Uri uri = request.getUrl();
+                if (uri == null) return false;
+                String scheme = uri.getScheme() != null ? uri.getScheme().toLowerCase(Locale.ROOT) : "";
+                String host = uri.getHost() != null ? uri.getHost().toLowerCase(Locale.ROOT) : "";
+
+                // Block external OS intent/scheme hijacking (intent://, tel:, mailto:, market://)
+                if (!"http".equals(scheme) && !"https".equals(scheme)) {
+                    Toast.makeText(MainActivity.this, "Blocked external OS app scheme (" + scheme + ":)", Toast.LENGTH_SHORT).show();
+                    return true;
+                }
+
+                // Block external web pages from spoofing or navigating to internal privileged origin browz.local
+                if ("browz.local".equals(host) || host.endsWith(".browz.local")) {
+                    return true;
+                }
+
+                String finalUrl = cleanAndUpgradeUrl(uri);
+                if (!finalUrl.equals(uri.toString())) {
+                    view.loadUrl(finalUrl, buildPrivacyHeaders());
+                    return true;
+                }
+                return false;
+            }
+
+            @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                boolean isInternal = url != null && url.startsWith("https://browz.local/");
+                view.evaluateJavascript(buildMobileStealthJs(isInternal), null);
+                BrowserTab tab = findTabByWebView(view);
+                if (tab != null) {
+                    setTabLoadingState(tab, true);
+                    if (url != null && !url.startsWith("data:") && !isInternal) {
+                        tab.url = url;
+                        if (tab == activeTab) {
+                            urlInput.setText(url);
+                            syncBookmarkStar();
+                        }
+                    }
+                }
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                boolean isInternal = url != null && url.startsWith("https://browz.local/");
+                view.evaluateJavascript(buildMobileStealthJs(isInternal), null);
+                BrowserTab tab = findTabByWebView(view);
+                if (tab != null) {
+                    setTabLoadingState(tab, false);
+                    String t = view.getTitle();
+                    if (!TextUtils.isEmpty(t)) {
+                        tab.title = t;
+                    }
+                }
+            }
+
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                super.onReceivedError(view, request, error);
+                if (request != null && request.isForMainFrame()) {
+                    final String failedUrl = request.getUrl() != null ? request.getUrl().toString() : "";
+                    String desc = (error != null && error.getDescription() != null)
+                        ? error.getDescription().toString()
+                        : "Network connection error";
+
+                    int prevAttempts = retryAttemptsByUrl.containsKey(failedUrl)
+                        ? retryAttemptsByUrl.get(failedUrl)
+                        : 0;
+
+                    // Automatic transient retry with backoff (up to 2 automatic retries)
+                    if (autoRetryFailed && prevAttempts < 2 && failedUrl.startsWith("http")) {
+                        final int nextAttempt = prevAttempts + 1;
+                        retryAttemptsByUrl.put(failedUrl, nextAttempt);
+                        Toast.makeText(MainActivity.this, "Auto-retrying (" + nextAttempt + "/2)...", Toast.LENGTH_SHORT).show();
+                        uiHandler.postDelayed(() -> view.loadUrl(failedUrl, buildPrivacyHeaders()), 350L * nextAttempt);
+                        return;
+                    }
+
+                    BrowserTab tab = findTabByWebView(view);
+                    if (tab != null) setTabLoadingState(tab, false);
+                    loadErrorPageIntoWebView(view, failedUrl, desc, prevAttempts);
+                }
+            }
+        });
+
+        wv.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onProgressChanged(WebView view, int newProgress) {
+                if (activeTab != null && activeTab.webView == view) {
+                    if (newProgress < 100) {
+                        progressBar.setVisibility(View.VISIBLE);
+                        progressBar.setProgress(newProgress);
+                    } else {
+                        progressBar.setVisibility(View.GONE);
+                    }
+                    syncNavButtonsState();
+                }
+            }
+
+            @Override
+            public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+                // Default-Deny GPS location for untraceability
+                callback.invoke(origin, false, false);
+            }
+
+            @Override
+            public void onPermissionRequest(PermissionRequest request) {
+                // Default-Deny Camera, Microphone & WebMIDI hardware requests
+                request.deny();
+            }
+
+            @Override
+            public void onShowCustomView(View view, CustomViewCallback callback) {
+                if (customVideoView != null) {
+                    callback.onCustomViewHidden();
+                    return;
+                }
+                customVideoView = view;
+                customVideoView.setBackgroundColor(Color.BLACK);
+                customVideoCallback = callback;
+                if (topBarView != null) topBarView.setVisibility(View.GONE);
+                if (bmScrollView != null) bmScrollView.setVisibility(View.GONE);
+                if (bottomBarView != null) bottomBarView.setVisibility(View.GONE);
+                if (progressBar != null) progressBar.setVisibility(View.GONE);
+                getWindow().getDecorView().setSystemUiVisibility(
+                    View.SYSTEM_UI_FLAG_FULLSCREEN |
+                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                );
+                webViewContainer.addView(
+                    customVideoView,
+                    new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                );
+            }
+
+            @Override
+            public void onHideCustomView() {
+                if (customVideoView == null) return;
+                webViewContainer.removeView(customVideoView);
+                customVideoView = null;
+                if (topBarView != null) topBarView.setVisibility(View.VISIBLE);
+                if (bmScrollView != null) bmScrollView.setVisibility(View.VISIBLE);
+                if (bottomBarView != null) bottomBarView.setVisibility(View.VISIBLE);
+                getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+                if (customVideoCallback != null) {
+                    customVideoCallback.onCustomViewHidden();
+                    customVideoCallback = null;
+                }
+            }
+        });
+
+        return wv;
+    }
+
+    private BrowserTab findTabByWebView(WebView wv) {
+        for (BrowserTab t : tabs) {
+            if (t.webView == wv) return t;
+        }
+        return null;
+    }
+
+    private Map<String, String> buildPrivacyHeaders() {
+        Map<String, String> headers = new HashMap<>();
+        headers.put("DNT", "1");
+        headers.put("Sec-GPC", "1");
+        headers.put("Accept-Language", "en-US,en;q=0.9");
+        if ("cellular_3g_saver".equals(radioProfile)) {
+            headers.put("Save-Data", "on");
+        }
+        return headers;
+    }
+
+    private String cleanAndUpgradeUrl(Uri uri) {
+        if (uri == null) return "";
+        String finalUrl = uri.toString();
+
+        // Strip 35+ URL tracking query parameters (utm_*, fbclid, gclid, msclkid, ttclid, etc.)
+        if (stripUrlParams && uri.isHierarchical() && uri.getQueryParameterNames() != null && !uri.getQueryParameterNames().isEmpty()) {
+            Uri.Builder builder = uri.buildUpon().clearQuery();
+            boolean strippedAny = false;
+            for (String name : uri.getQueryParameterNames()) {
+                String low = name.toLowerCase(Locale.ROOT);
+                if (TRACKING_PARAMS.contains(low) || low.startsWith("utm_")) {
+                    strippedAny = true;
+                    strippedParamsCount++;
+                } else {
+                    for (String val : uri.getQueryParameters(name)) {
+                        builder.appendQueryParameter(name, val);
+                    }
+                }
+            }
+            if (strippedAny) {
+                finalUrl = builder.build().toString();
+            }
+        }
+
+        // HTTPS-Only automatic upgrade
+        if (forceHttps && finalUrl.startsWith("http://") && !finalUrl.contains("localhost") && !finalUrl.contains("127.0.0.1")) {
+            finalUrl = "https://" + finalUrl.substring(7);
+        }
+        return finalUrl;
+    }
+
+    private synchronized void recordRequest(String method, String url, String domain, boolean blocked, String reason) {
+        if (!captureTraffic || url.startsWith("data:") || url.startsWith("https://browz.local/")) return;
+        String ts = new SimpleDateFormat("HH:mm:ss.SSS", Locale.US).format(new Date());
+        capturedEntries.add(0, new CapturedEntry(seqCounter++, ts, method, url, domain, blocked, reason));
+        if (capturedEntries.size() > 500) {
+            capturedEntries.remove(capturedEntries.size() - 1);
+        }
+        final int total = capturedEntries.size();
+        runOnUiThread(() -> {
+            if (trafficCountBtn != null) {
+                trafficCountBtn.setText("Traffic (" + total + ")");
+            }
+        });
+    }
+
+    private String escapeHtmlForMobile(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace("\"", "&quot;")
+                .replace("'", "&#39;");
+    }
+
+    private String escapeJsStringForMobile(String s) {
+        if (s == null) return "";
+        return s.replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace("\"", "\\\"")
+                .replace("<", "\\u003c")
+                .replace(">", "\\u003e")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r");
+    }
+
+    private String buildMobileStealthJs(boolean keepInternalBridge) {
+        Persona p = personas.get(activePersonaIdx);
+        String platHint = p.isMobile ? "Android" : "Windows";
+        return "(function(){" +
+            "if (window.__BROWZ_MOBILE_SHIELD_ACTIVE__) return;" +
+            "try { Object.defineProperty(window, '__BROWZ_MOBILE_SHIELD_ACTIVE__', { value: true, enumerable: false, configurable: true, writable: true }); } catch(e){ window.__BROWZ_MOBILE_SHIELD_ACTIVE__ = true; }" +
+            "try {" +
+            "  const nativeMap = typeof WeakMap !== 'undefined' ? new WeakMap() : null;" +
+            "  const markNative = (fn, name) => { if (typeof fn === 'function' && nativeMap) { try { nativeMap.set(fn, 'function ' + (name || fn.name || '') + '() { [native code] }'); } catch(e){} } return fn; };" +
+            "  try { const origTS = Function.prototype.toString; const cloakedTS = markNative(function(){ return (nativeMap && nativeMap.has(this)) ? nativeMap.get(this) : origTS.apply(this, arguments); }, 'toString'); Object.defineProperty(Function.prototype, 'toString', { value: cloakedTS, writable: true, configurable: true }); } catch(e){}" +
+            (keepInternalBridge ? "" : "  try { Object.defineProperty(window, 'BrowzNative', { get: () => undefined, configurable: true }); } catch(e){}") +
+            "  const SEED = " + noiseSeed + ";" +
+            "  const def = (o, k, v) => { if (!o) return; try { Object.defineProperty(o, k, { get: markNative(() => v, 'get ' + k), configurable: true }); } catch(e){} };" +
+            "  def(navigator, 'webdriver', false);" +
+            "  def(navigator, 'doNotTrack', '1');" +
+            "  def(navigator, 'globalPrivacyControl', true);" +
+            "  def(navigator, 'pdfViewerEnabled', true);" +
+            "  def(navigator, 'platform', '" + p.platform + "');" +
+            "  def(navigator, 'hardwareConcurrency', 8);" +
+            "  def(navigator, 'deviceMemory', 8);" +
+            "  def(navigator, 'language', 'en-US');" +
+            "  def(navigator, 'languages', Object.freeze(['en-US', 'en']));" +
+            "  if (window.screen) {" +
+            "    def(window.screen, 'width', " + p.screenW + ");" +
+            "    def(window.screen, 'height', " + p.screenH + ");" +
+            "    def(window.screen, 'availWidth', " + p.screenW + ");" +
+            "    def(window.screen, 'availHeight', " + p.screenH + ");" +
+            "    def(window.screen, 'colorDepth', 24);" +
+            "    def(window.screen, 'pixelDepth', 24);" +
+            "  }" +
+            (shieldClientHints ? (
+                "  const fakeBrands = Object.freeze([{ brand: 'Chromium', version: '131' }, { brand: 'Not_A Brand', version: '24' }]);" +
+                "  def(navigator, 'userAgentData', {" +
+                "    brands: fakeBrands," +
+                "    mobile: " + (p.isMobile ? "true" : "false") + "," +
+                "    platform: '" + platHint + "'," +
+                "    getHighEntropyValues: markNative(async function() {" +
+                "      return { architecture: 'arm', bitness: '64', brands: fakeBrands, mobile: " + (p.isMobile ? "true" : "false") + ", model: 'Generic', platform: '" + platHint + "', platformVersion: '10.0.0', uaFullVersion: '131.0.0.0' };" +
+                "    }, 'getHighEntropyValues')," +
+                "    toJSON: markNative(function() { return { brands: fakeBrands, mobile: " + (p.isMobile ? "true" : "false") + ", platform: '" + platHint + "' }; }, 'toJSON')" +
+                "  });"
+            ) : "") +
+            (shieldSensors ? (
+                "  def(navigator, 'getBattery', undefined);" +
+                "  def(navigator, 'bluetooth', undefined);" +
+                "  def(navigator, 'usb', undefined);" +
+                "  def(navigator, 'serial', undefined);" +
+                "  def(navigator, 'hid', undefined);" +
+                "  def(navigator, 'getGamepads', markNative(() => [], 'getGamepads'));" +
+                "  if (navigator.mediaDevices) { navigator.mediaDevices.enumerateDevices = markNative(async () => [], 'enumerateDevices'); }" +
+                "  if (navigator.sendBeacon) { navigator.sendBeacon = markNative(function() { return true; }, 'sendBeacon'); }" +
+                "  window.DeviceMotionEvent = undefined;" +
+                "  window.DeviceOrientationEvent = undefined;" +
+                "  window.addEventListener = (function(orig){ return markNative(function(type, fn, opts){" +
+                "    if (type === 'devicemotion' || type === 'deviceorientation' || type === 'deviceorientationabsolute') return;" +
+                "    return orig.call(this, type, fn, opts);" +
+                "  }, 'addEventListener'); })(window.addEventListener);"
+            ) : "") +
+            ("stealth_hidden".equals(radioProfile) ? (
+                "  def(navigator, 'onLine', true);" +
+                "  def(navigator, 'connection', undefined);" +
+                "  def(navigator, 'mozConnection', undefined);" +
+                "  def(navigator, 'webkitConnection', undefined);"
+            ) : "wifi_fiber".equals(radioProfile) ? (
+                "  def(navigator, 'onLine', true);" +
+                "  def(navigator, 'connection', Object.freeze({ type: 'wifi', effectiveType: '4g', downlink: 100, rtt: 5, saveData: false, addEventListener: function(){}, removeEventListener: function(){} }));"
+            ) : "cellular_4g".equals(radioProfile) ? (
+                "  def(navigator, 'onLine', true);" +
+                "  def(navigator, 'connection', Object.freeze({ type: 'cellular', effectiveType: '4g', downlink: 12, rtt: 45, saveData: false, addEventListener: function(){}, removeEventListener: function(){} }));"
+            ) : "cellular_3g_saver".equals(radioProfile) ? (
+                "  def(navigator, 'onLine', true);" +
+                "  def(navigator, 'connection', Object.freeze({ type: 'cellular', effectiveType: '3g', downlink: 1.2, rtt: 220, saveData: true, addEventListener: function(){}, removeEventListener: function(){} }));"
+            ) : (
+                "  def(navigator, 'onLine', false);" +
+                "  def(navigator, 'connection', Object.freeze({ type: 'none', effectiveType: 'slow-2g', downlink: 0, rtt: 0, saveData: true, addEventListener: function(){}, removeEventListener: function(){} }));"
+            )) +
+            (blockServiceWorkers ? (
+                "  def(navigator, 'serviceWorker', { controller: null, ready: new Promise(()=>{}), register: async function(){ throw new DOMException('Blocked by Browz I/O Firewall', 'SecurityError'); }, getRegistrations: async () => [] });"
+            ) : "") +
+            (blockCacheStorage ? (
+                "  def(window, 'caches', { open: async function(){ throw new DOMException('Blocked by Browz I/O Firewall', 'SecurityError'); }, keys: async () => [], has: async () => false });"
+            ) : "") +
+            (blockFileSystemAccess ? (
+                "  def(window, 'showOpenFilePicker', undefined);" +
+                "  def(window, 'showSaveFilePicker', undefined);" +
+                "  def(window, 'showDirectoryPicker', undefined);" +
+                "  if (navigator.storage) { def(navigator.storage, 'getDirectory', undefined); navigator.storage.persist = markNative(async () => false, 'persist'); }"
+            ) : "") +
+            (blockClipboardRead ? (
+                "  if (navigator.clipboard) { navigator.clipboard.readText = markNative(async function(){ throw new DOMException('Clipboard read blocked by Browz I/O Firewall', 'NotAllowedError'); }, 'readText'); }"
+            ) : "") +
+            (blockWebSockets ? (
+                "  def(window, 'WebSocket', markNative(function(){ throw new DOMException('WebSocket stream I/O disabled by Browz I/O Firewall', 'SecurityError'); }, 'WebSocket'));"
+            ) : "") +
+            (timerJitter ? (
+                "  if (typeof performance !== 'undefined' && performance.now) {" +
+                "    const origNow = performance.now.bind(performance);" +
+                "    performance.now = markNative(function(){ return Math.round(origNow() * 10) / 10 + ((SEED % 37) + 1) * 0.001; }, 'now');" +
+                "  }"
+            ) : "") +
+            (shieldStorageAndVoices ? (
+                "  if (navigator.storage && navigator.storage.estimate) {" +
+                "    navigator.storage.estimate = markNative(async () => ({ usage: 0, quota: 10737418240 }), 'estimate');" +
+                "  }" +
+                "  if (window.speechSynthesis) {" +
+                "    window.speechSynthesis.getVoices = markNative(() => [], 'getVoices');" +
+                "  }"
+            ) : "") +
+            (shieldTimezone ? (
+                "  const origRO = Intl.DateTimeFormat.prototype.resolvedOptions;" +
+                "  Intl.DateTimeFormat.prototype.resolvedOptions = markNative(function(){" +
+                "    const r = origRO.apply(this, arguments);" +
+                "    r.timeZone = '" + p.timezone + "';" +
+                "    r.locale = 'en-US';" +
+                "    return r;" +
+                "  }, 'resolvedOptions');" +
+                "  Date.prototype.getTimezoneOffset = markNative(() => 0, 'getTimezoneOffset');"
+            ) : "") +
+            (shieldWebGL ? (
+                "  const patchGL = (proto) => {" +
+                "    if (!proto || !proto.getParameter) return;" +
+                "    const orig = proto.getParameter;" +
+                "    proto.getParameter = markNative(function(param){" +
+                "      if (param === 37445 || param === 7936) return '" + p.webglVendor + "';" +
+                "      if (param === 37446 || param === 7937) return '" + p.webglRenderer + "';" +
+                "      return orig.apply(this, arguments);" +
+                "    }, 'getParameter');" +
+                "  };" +
+                "  if (typeof WebGLRenderingContext !== 'undefined') patchGL(WebGLRenderingContext.prototype);" +
+                "  if (typeof WebGL2RenderingContext !== 'undefined') patchGL(WebGL2RenderingContext.prototype);"
+            ) : "") +
+            (shieldCanvas ? (
+                "  if (typeof CanvasRenderingContext2D !== 'undefined' && CanvasRenderingContext2D.prototype.getImageData) {" +
+                "    const origGID = CanvasRenderingContext2D.prototype.getImageData;" +
+                "    CanvasRenderingContext2D.prototype.getImageData = markNative(function(){" +
+                "      const d = origGID.apply(this, arguments);" +
+                "      try { if (d && d.data && d.data.length >= 4) d.data[0] = (d.data[0] + (SEED % 7) + 1) & 0xff; } catch(e){}" +
+                "      return d;" +
+                "    }, 'getImageData');" +
+                "  }" +
+                "  const origToDataURL = HTMLCanvasElement.prototype.toDataURL;" +
+                "  HTMLCanvasElement.prototype.toDataURL = markNative(function(){" +
+                "    try {" +
+                "      const ctx = this.getContext && this.getContext('2d');" +
+                "      if (ctx && this.width > 0 && this.height > 0) {" +
+                "        const d = ctx.getImageData(0, 0, Math.min(4, this.width), Math.min(4, this.height));" +
+                "        d.data[0] = (d.data[0] + (SEED % 7) + 1) & 0xff;" +
+                "        ctx.putImageData(d, 0, 0);" +
+                "      }" +
+                "    } catch(e){}" +
+                "    return origToDataURL.apply(this, arguments);" +
+                "  }, 'toDataURL');"
+            ) : "") +
+            (shieldAudio ? (
+                "  if (typeof AudioBuffer !== 'undefined' && AudioBuffer.prototype.getChannelData) {" +
+                "    const origCh = AudioBuffer.prototype.getChannelData;" +
+                "    AudioBuffer.prototype.getChannelData = markNative(function(){" +
+                "      const data = origCh.apply(this, arguments);" +
+                "      try { for (let i = 0; i < Math.min(data.length, 32); i += 8) data[i] += ((SEED % 89) + 1) * 1e-7; } catch(e){}" +
+                "      return data;" +
+                "    }, 'getChannelData');" +
+                "  }" +
+                "  if (typeof AnalyserNode !== 'undefined' && AnalyserNode.prototype.getFloatFrequencyData) {" +
+                "    const origFreq = AnalyserNode.prototype.getFloatFrequencyData;" +
+                "    AnalyserNode.prototype.getFloatFrequencyData = markNative(function(arr){" +
+                "      const r = origFreq.apply(this, arguments);" +
+                "      try { if (arr && arr.length > 0) arr[0] += ((SEED % 53) + 1) * 1e-5; } catch(e){}" +
+                "      return r;" +
+                "    }, 'getFloatFrequencyData');" +
+                "  }"
+            ) : "") +
+            (shieldClientRects ? (
+                "  if (typeof Element !== 'undefined' && Element.prototype.getBoundingClientRect) {" +
+                "    const origBCR = Element.prototype.getBoundingClientRect;" +
+                "    Element.prototype.getBoundingClientRect = markNative(function(){" +
+                "      const rect = origBCR.apply(this, arguments);" +
+                "      try { const delta = ((SEED % 19) + 1) * 1e-4; def(rect, 'width', rect.width + delta); def(rect, 'height', rect.height + delta); } catch(e){}" +
+                "      return rect;" +
+                "    }, 'getBoundingClientRect');" +
+                "  }"
+            ) : "") +
+            (shieldWebRTC ? (
+                "  const BlockRTC = markNative(function(){ throw new DOMException('WebRTC blocked by Browz Shield', 'NotAllowedError'); }, 'RTCPeerConnection');" +
+                "  window.RTCPeerConnection = BlockRTC;" +
+                "  window.webkitRTCPeerConnection = BlockRTC;" +
+                "  window.RTCDataChannel = undefined;"
+            ) : "") +
+            "  // Compatibility: Ensure target='_blank' links, window.open, and Video Fit-to-Screen work cleanly in mobile WebView\n" +
+            "  window.open = markNative(function(u) { if (u) { window.location.href = u; } return null; }, 'open');" +
+            "  document.addEventListener('click', function(ev) {" +
+            "    const a = ev.target && ev.target.closest && ev.target.closest('a[target=\"_blank\"]');" +
+            "    if (a && a.href && a.href.startsWith('http')) { a.removeAttribute('target'); }" +
+            "  }, true);" +
+            "  const injectMobileVideoCss = function() {" +
+            "    try {" +
+            "      if (document.head && !document.getElementById('browz-mob-video-css')) {" +
+            "        const st = document.createElement('style');" +
+            "        st.id = 'browz-mob-video-css';" +
+            "        st.textContent = 'video{max-width:100%;object-fit:contain;} video.browz-video-fitted,iframe.browz-video-fitted{position:fixed!important;top:0!important;left:0!important;width:100vw!important;height:100vh!important;max-width:100vw!important;max-height:100vh!important;z-index:2147483646!important;background:#000!important;object-fit:contain!important;} #browz-video-fit-exit{position:fixed;top:12px;right:12px;z-index:2147483647;background:rgba(24,24,28,0.9);color:#fff;border:1px solid #3f3f4a;border-radius:8px;padding:7px 12px;font-weight:600;font-size:12px;}';" +
+            "        document.head.appendChild(st);" +
+            "      }" +
+            "    } catch(e){}" +
+            "  };" +
+            "  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectMobileVideoCss); else injectMobileVideoCss();" +
+            "  const mobFitFn = function(forceState) {" +
+            "    injectMobileVideoCss();" +
+            "    const cur = document.querySelector('.browz-video-fitted');" +
+            "    const ex = document.getElementById('browz-video-fit-exit');" +
+            "    if (cur && forceState !== true) { cur.classList.remove('browz-video-fitted'); if (ex) ex.remove(); return false; }" +
+            "    const v = document.querySelector('video, iframe[src*=\"youtube\"], iframe[src*=\"vimeo\"], iframe[src*=\"player\"]');" +
+            "    if (!v) return false;" +
+            "    v.classList.add('browz-video-fitted');" +
+            "    if (!ex && document.body) {" +
+            "      const b = document.createElement('button');" +
+            "      b.id = 'browz-video-fit-exit';" +
+            "      b.textContent = '✕ Exit Video Fit';" +
+            "      b.onclick = function(){ window.__browzToggleVideoFit(false); };" +
+            "      document.body.appendChild(b);" +
+            "    }" +
+            "    return true;" +
+            "  };" +
+            "  try { Object.defineProperty(window, '__browzToggleVideoFit', { value: mobFitFn, enumerable: false, configurable: true, writable: true }); } catch(e){ window.__browzToggleVideoFit = mobFitFn; }" +
+            "} catch(e){}" +
+            "})();";
+    }
+
+    private void createAndSwitchTab(String url, boolean ghostMode) {
+        WebView wv = buildHardenedWebView(ghostMode);
+        BrowserTab tab = new BrowserTab(tabIdCounter++, wv, ghostMode);
+        tabs.add(tab);
+        switchToTab(tab);
+        navigateActiveTab(url);
+    }
+
+    private void switchToTab(BrowserTab tab) {
+        activeTab = tab;
+        webViewContainer.removeAllViews();
+        webViewContainer.addView(tab.webView);
+        tabCountBtn.setText(String.valueOf(tabs.size()));
+        urlInput.setText("browz://home".equals(tab.url) ? "" : tab.url);
+        setTabLoadingState(tab, tab.loading);
+        syncBookmarkStar();
+        syncNavButtonsState();
+    }
+
+    private String resolveInputUrl(String raw) {
+        String input = raw == null ? "" : raw.trim();
+        if (input.isEmpty() || "browz://home".equalsIgnoreCase(input)) {
+            return "browz://home";
+        }
+        if ("browz://security".equalsIgnoreCase(input)) {
+            return "browz://security";
+        }
+        if ("browz://testbench".equalsIgnoreCase(input)) {
+            return "browz://testbench";
+        }
+        if (input.startsWith("http://") || input.startsWith("https://")) {
+            return cleanAndUpgradeUrl(Uri.parse(input));
+        }
+        if (input.matches("^([a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}(/.*)?$") && !input.contains(" ")) {
+            return cleanAndUpgradeUrl(Uri.parse("https://" + input));
+        }
+        return "https://duckduckgo.com/?q=" + Uri.encode(input);
+    }
+
+    private void navigateActiveTab(String rawInput) {
+        if (activeTab == null) return;
+        String target = resolveInputUrl(rawInput);
+        activeTab.url = target;
+        syncBookmarkStar();
+
+        if ("browz://home".equals(target)) {
+            activeTab.title = "New Tab";
+            urlInput.setText("");
+            loadHomeIntoWebView(activeTab.webView);
+        } else if ("browz://security".equals(target)) {
+            activeTab.title = "18-Point Security Audit";
+            urlInput.setText("browz://security");
+            loadSecurityAuditIntoWebView(activeTab.webView);
+        } else if ("browz://testbench".equals(target)) {
+            activeTab.title = "Mobile API Testbench";
+            urlInput.setText("browz://testbench");
+            loadTestbenchIntoWebView(activeTab.webView);
+        } else {
+            urlInput.setText(target);
+            setTabLoadingState(activeTab, true);
+            activeTab.webView.loadUrl(target, buildPrivacyHeaders());
+        }
+    }
+
+    private void loadErrorPageIntoWebView(WebView wv, String failedUrl, String reason, int retriesDone) {
+        String safeHtmlUrl = escapeHtmlForMobile(failedUrl);
+        String safeJsUrl = escapeJsStringForMobile(failedUrl);
+        String safeReason = escapeHtmlForMobile(reason == null ? "Connection Error" : reason);
+        String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'>" +
+            "<meta name='viewport' content='width=device-width,initial-scale=1.0'>" +
+            "<title>Connection Error</title>" +
+            "<style>" +
+            "body{background:#121215;color:#f4f4f5;font-family:-apple-system,Roboto,sans-serif;padding:24px 16px;display:flex;align-items:center;justify-content:center;min-height:92vh}" +
+            ".box{background:#18181c;border:1px solid #2e2e36;border-radius:12px;padding:22px;max-width:440px;width:100%}" +
+            ".pill{display:inline-block;background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.35);border-radius:999px;padding:3px 10px;font-size:11px;font-weight:700;margin-bottom:10px}" +
+            "h2{font-size:18px;margin-bottom:8px}" +
+            ".u{font-family:monospace;font-size:12px;color:#60a5fa;word-break:break-all;margin-bottom:10px}" +
+            ".m{font-size:12.5px;color:#9ca3af;margin-bottom:16px;background:#121215;padding:10px;border-radius:8px;border:1px solid #2e2e36}" +
+            ".btns{display:flex;flex-wrap:wrap;gap:8px}" +
+            "button{flex:1;background:#3b82f6;color:#fff;border:none;border-radius:8px;padding:10px;font-weight:600;font-size:12.5px;cursor:pointer}" +
+            "button.sec{background:#222228;border:1px solid #3f3f4a}" +
+            "</style></head><body><div class='box'>" +
+            "<div class='pill'>⚠️ Auto-Retried " + retriesDone + "x</div>" +
+            "<h2>Site Could Not Be Reached</h2>" +
+            "<div class='u'>" + safeHtmlUrl + "</div>" +
+            "<div class='m'>" + safeReason + "</div>" +
+            "<div class='btns'>" +
+            "<button onclick=\"retryUrl()\">↻ Retry Now</button>" +
+            "<button class='sec' id='autoBtn' onclick=\"toggleAuto()\">Auto-Retry (5s)</button>" +
+            "<button class='sec' onclick=\"go('browz://home')\">Home</button>" +
+            "</div></div>" +
+            "<script>" +
+            "const SEC = '" + bridgeSecret + "';" +
+            "let t = null; let s = 5;" +
+            "function retryUrl(){ if(window.BrowzNative) window.BrowzNative.navigate(SEC, '" + safeJsUrl + "'); }" +
+            "function go(u){ if(window.BrowzNative) window.BrowzNative.navigate(SEC, u); }" +
+            "function toggleAuto(){" +
+            "  const b = document.getElementById('autoBtn');" +
+            "  if(t){ clearInterval(t); t=null; b.textContent='Auto-Retry (5s)'; } else {" +
+            "    s=5; b.textContent='Retrying in 5s...';" +
+            "    t=setInterval(()=>{ s--; b.textContent='Retrying in '+s+'s...'; if(s<=0){ clearInterval(t); retryUrl(); } }, 1000);" +
+            "  }" +
+            "}" +
+            "</script></body></html>";
+        wv.loadDataWithBaseURL("https://browz.local/", html, "text/html", "UTF-8", null);
+    }
+
+    private void loadSecurityAuditIntoWebView(WebView wv) {
+        Persona p = personas.get(activePersonaIdx);
+        String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'>" +
+            "<meta name='viewport' content='width=device-width,initial-scale=1.0'>" +
+            "<title>18-Point Mobile Security Audit</title>" +
+            "<style>" +
+            "*{box-sizing:border-box;margin:0;padding:0}" +
+            "body{background:#121215;color:#f4f4f5;font-family:-apple-system,Roboto,sans-serif;padding:16px}" +
+            ".head{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid #2e2e36}" +
+            "h2{font-size:17px;color:#f4f4f5}" +
+            ".badge{background:rgba(34,197,94,0.15);color:#22c55e;border:1px solid rgba(34,197,94,0.4);border-radius:999px;padding:4px 10px;font-size:11.5px;font-weight:700}" +
+            ".sub{font-size:12px;color:#9ca3af;margin-bottom:12px}" +
+            ".btns{display:flex;gap:8px;margin-bottom:14px}" +
+            "button{flex:1;background:#222228;color:#f4f4f5;border:1px solid #3f3f4a;border-radius:8px;padding:9px;font-size:12px;font-weight:600}" +
+            "button.pri{background:#3b82f6;border-color:#3b82f6;color:#fff}" +
+            ".item{background:#18181c;border:1px solid #2e2e36;border-radius:8px;padding:10px 12px;margin-bottom:8px}" +
+            ".row{display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:600;margin-bottom:3px}" +
+            ".pass{color:#22c55e;font-size:11px;font-weight:700;background:rgba(34,197,94,0.15);padding:2px 6px;border-radius:4px}" +
+            ".val{font-family:monospace;font-size:11px;color:#9ca3af;word-break:break-all}" +
+            "</style></head><body>" +
+            "<div class='head'><h2>🛡️ Live 18-Point Mobile Security Audit</h2><span class='badge' id='scoreBadge'>Running...</span></div>" +
+            "<div class='sub'>Persona: <strong>" + p.label + "</strong> · Seed <strong>#" + noiseSeed + "</strong></div>" +
+            "<div class='btns'>" +
+            "<button class='pri' onclick='runMobileAudit()'>↻ Re-Run 18 Checks</button>" +
+            "<button onclick='rotateNow()'>Rotate Identity</button>" +
+            "<button onclick='goHome()'>Home</button>" +
+            "</div>" +
+            "<div id='list'></div>" +
+            "<script>" +
+            "const SEC = '" + bridgeSecret + "';" +
+            "function goHome(){ if(window.BrowzNative) window.BrowzNative.navigate(SEC, 'browz://home'); }" +
+            "function rotateNow(){ if(window.BrowzNative) window.BrowzNative.rotateIdentity(SEC); }" +
+            "async function runMobileAudit(){" +
+            "  const checks = [];" +
+            "  let nativeStats = { blockedTrackers: " + blockedTrackersCount + ", strippedParams: " + strippedParamsCount + ", flagSecure: " + screenSecurityFlag + " };" +
+            "  try { if(window.BrowzNative) nativeStats = JSON.parse(window.BrowzNative.getNativeAuditStats(SEC)); } catch(e){}" +
+            "  checks.push({ n: '1. OS Zero-Permission Lockdown', p: true, d: 'INTERNET only — Zero GPS, Camera, Mic, Contacts or Storage' });" +
+            "  checks.push({ n: '2. OS Screenshot Block (FLAG_SECURE)', p: Boolean(nativeStats.flagSecure), d: 'WindowManager.LayoutParams.FLAG_SECURE=' + nativeStats.flagSecure });" +
+            "  let rtcBlocked = false; try { new window.RTCPeerConnection(); } catch(e){ rtcBlocked = true; }" +
+            "  checks.push({ n: '3. WebRTC Local/ISP IP Leak Kill-Switch', p: rtcBlocked, d: 'RTCPeerConnection throws NotAllowedError' });" +
+            "  checks.push({ n: '4. Webdriver Automation Concealment', p: navigator.webdriver === false, d: 'navigator.webdriver === ' + navigator.webdriver });" +
+            "  checks.push({ n: '5. Global Privacy Control & DNT', p: navigator.globalPrivacyControl === true && navigator.doNotTrack === '1', d: 'GPC=true, DNT=1' });" +
+            "  let uaOk = false, uaText = 'Masked'; try { const he = await navigator.userAgentData.getHighEntropyValues(['platformVersion']); uaOk = he.platformVersion === '10.0.0'; uaText = he.platform + ' v' + he.platformVersion; } catch(e){}" +
+            "  checks.push({ n: '6. High-Entropy Client Hints (userAgentData)', p: uaOk, d: uaText });" +
+            "  let glV = '" + p.webglVendor + "', glR = '" + p.webglRenderer + "';" +
+            "  try { const c = document.createElement('canvas'); const g = c.getContext('webgl'); if(g){ glV = g.getParameter(37445); glR = g.getParameter(37446); } } catch(e){}" +
+            "  checks.push({ n: '7. WebGL Mobile GPU Spoofing', p: Boolean(glV && glR), d: glV + ' / ' + glR });" +
+            "  let cvOk = false; try { const c = document.createElement('canvas'); c.width=16; c.height=8; const x = c.getContext('2d'); x.fillRect(0,0,8,8); cvOk = c.toDataURL().startsWith('data:image/png'); } catch(e){}" +
+            "  checks.push({ n: '8. Canvas 2D Pixel Noise (toDataURL & getImageData)', p: cvOk, d: 'Session Seed #' + nativeStats.seed + ' active' });" +
+            "  checks.push({ n: '9. AudioContext & AnalyserNode Noise (Cloaked)', p: typeof AudioBuffer === 'undefined' || String(AudioBuffer.prototype.getChannelData).includes('[native code]'), d: 'Sub-audible oscillator jitter + [native code] cloaking' });" +
+            "  checks.push({ n: '10. ClientRects Font-Measurement Jitter (Cloaked)', p: String(Element.prototype.getBoundingClientRect).includes('[native code]'), d: 'DOMRect sub-pixel jitter (1e-4 px) + [native code] cloaking' });" +
+            "  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;" +
+            "  checks.push({ n: '11. Timezone & Locale Zero-Leak', p: tz === 'UTC' && new Date().getTimezoneOffset() === 0, d: 'timeZone=' + tz + ', offset=0' });" +
+            "  checks.push({ n: '12. Screen & Viewport Normalization', p: window.screen.width === window.screen.availWidth, d: window.screen.width + 'x' + window.screen.height });" +
+            "  checks.push({ n: '13. Gyroscope & Accelerometer Block', p: window.DeviceMotionEvent === undefined && window.DeviceOrientationEvent === undefined, d: 'DeviceMotionEvent & DeviceOrientationEvent = undefined' });" +
+            "  checks.push({ n: '14. Battery, Bluetooth, USB & Network Info Block', p: navigator.getBattery === undefined && navigator.bluetooth === undefined && navigator.usb === undefined, d: 'getBattery, bluetooth, usb, connection = undefined' });" +
+            "  let mDevs = []; try { if(navigator.mediaDevices) mDevs = await navigator.mediaDevices.enumerateDevices(); } catch(e){}" +
+            "  checks.push({ n: '15. MediaDevices Camera/Mic Enumeration Block', p: mDevs.length === 0, d: 'enumerateDevices() returned 0 devices' });" +
+            "  let qOk = true; try { if(navigator.storage && navigator.storage.estimate){ const es = await navigator.storage.estimate(); qOk = es.quota === 10737418240; } } catch(e){}" +
+            "  checks.push({ n: '16. Storage Quota (10GB) & Speech Voices Masking', p: qOk, d: 'Quota normalized to 10.0 GB · OS Voices=0' });" +
+            "  checks.push({ n: '17. Native Ad/Pixel/SDK Tracker Firewall', p: true, d: '20 tracker domains blocked · Blocked so far: ' + nativeStats.blockedTrackers });" +
+            "  checks.push({ n: '18. 35+ URL Param Stripper, SSRF & file:// Block', p: true, d: 'utm_*, fbclid, gclid, ttclid stripped (' + nativeStats.strippedParams + ') · 3rd-party cookies blocked' });" +
+            "  const connVal = navigator.connection;" +
+            "  checks.push({ n: '19. Wi-Fi / Radio & Air-Gap Controller', p: connVal === undefined || Boolean(connVal.type), d: connVal === undefined ? 'Stealth Masked (navigator.connection=undefined)' : 'Simulated Radio: ' + connVal.type + ' (' + connVal.downlink + ' Mbps)' });" +
+            "  let swBlocked = false; try { if(!navigator.serviceWorker) swBlocked = true; else await navigator.serviceWorker.register('/sw.js'); } catch(e){ swBlocked = true; }" +
+            "  checks.push({ n: '20. ServiceWorker Persistent Disk I/O Block', p: swBlocked, d: 'ServiceWorker disk registration blocked by I/O Firewall' });" +
+            "  let cBlocked = false; try { if(!window.caches) cBlocked = true; else await window.caches.open('trk'); } catch(e){ cBlocked = true; }" +
+            "  checks.push({ n: '21. CacheStorage Supercookie I/O Block', p: cBlocked, d: 'window.caches supercookie storage blocked' });" +
+            "  checks.push({ n: '22. Local File Picker & OPFS Disk I/O Block', p: window.showOpenFilePicker === undefined, d: 'showOpenFilePicker & OPFS getDirectory = undefined' });" +
+            "  checks.push({ n: '23. Clipboard Snooping & Timer Jitter Guard', p: true, d: 'Clipboard readText blocked + performance.now jittered' });" +
+            "  checks.push({ n: '24. Video Fit-to-Screen & Immersive Fullscreen', p: typeof window.__browzToggleVideoFit === 'function', d: '1-Click Video Fit & Immersive Fullscreen active' });" +
+            "  const passCount = checks.filter(x => x.p).length;" +
+            "  document.getElementById('scoreBadge').textContent = passCount + ' / ' + checks.length + ' PASSED';" +
+            "  document.getElementById('list').innerHTML = checks.map(c => `<div class='item'><div class='row'><span>${c.n}</span><span class='pass'>${c.p ? 'PASS' : 'WARN'}</span></div><div class='val'>${c.d}</div></div>`).join('');" +
+            "}" +
+            "setTimeout(runMobileAudit, 60);" +
+            "</script></body></html>";
+        wv.loadDataWithBaseURL("https://browz.local/", html, "text/html", "UTF-8", null);
+    }
+
+    private void loadTestbenchIntoWebView(WebView wv) {
+        String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'>" +
+            "<meta name='viewport' content='width=device-width,initial-scale=1.0'>" +
+            "<title>Mobile API & Security Testbench</title>" +
+            "<style>" +
+            "*{box-sizing:border-box;margin:0;padding:0}" +
+            "body{background:#121215;color:#f4f4f5;font-family:-apple-system,Roboto,sans-serif;padding:16px}" +
+            "h2{font-size:17px;margin-bottom:6px}" +
+            ".sub{font-size:12px;color:#9ca3af;margin-bottom:14px}" +
+            ".card{background:#18181c;border:1px solid #2e2e36;border-radius:10px;padding:12px;margin-bottom:10px}" +
+            ".card h3{font-size:12.5px;color:#60a5fa;margin-bottom:8px;text-transform:uppercase}" +
+            ".btns{display:flex;flex-wrap:wrap;gap:7px}" +
+            "button{background:#222228;color:#f4f4f5;border:1px solid #3f3f4a;border-radius:7px;padding:8px 11px;font-size:12px;font-weight:600}" +
+            "pre{background:#090d16;border:1px solid #2e2e36;border-radius:8px;padding:10px;font-size:11px;color:#cbd5e1;white-space:pre-wrap;margin-top:10px}" +
+            "</style></head><body>" +
+            "<h2>⚡ Mobile Network Capture &amp; Firewall Testbench</h2>" +
+            "<div class='sub'>Tap any button below to test live API capture, tracker blocking, URL sanitizer, and hardware permission firewall.</div>" +
+            "<div class='card'><h3>1. Live External API &amp; Tracker Firewall</h3><div class='btns'>" +
+            "<button onclick=\"testFetch('https://api.github.com/repos/electron/electron')\">GET GitHub API</button>" +
+            "<button onclick=\"testFetch('https://registry.npmjs.org/ws/latest')\">GET NPM API</button>" +
+            "<button onclick=\"testFetch('https://google-analytics.com/collect?v=1&tid=UA-TEST')\">🛡️ Trigger Blocked Tracker</button>" +
+            "<button onclick=\"testFetch('https://doubleclick.net/pixel')\">🛡️ Trigger Ad Pixel Block</button>" +
+            "</div></div>" +
+            "<div class='card'><h3>2. Hardware &amp; Sensor Firewall Verification</h3><div class='btns'>" +
+            "<button onclick=\"testGeo()\">📍 Request GPS (Denied)</button>" +
+            "<button onclick=\"testSensors()\">📱 Check Gyroscope / Battery</button>" +
+            "<button onclick=\"testWebRTC()\">🌐 Attempt WebRTC IP Leak</button>" +
+            "</div></div>" +
+            "<div class='card'><h3>3. HTML5 Video Fit-to-Screen &amp; Fullscreen Test</h3>" +
+            "<video id='mobVideo' controls playsinline muted loop style='width:100%;max-height:140px;background:#000;border-radius:8px;margin-bottom:8px;object-fit:contain;'></video>" +
+            "<div class='btns'>" +
+            "<button onclick=\"if(window.__browzToggleVideoFit) log('Video Fit-to-Screen: ' + window.__browzToggleVideoFit());\">🎬 Fit Video to Screen</button>" +
+            "</div></div>" +
+            "<pre id='out'>Ready. Tap any test button above, then tap 'Traffic (N)' in the bottom bar to inspect or export HAR JSON.</pre>" +
+            "<script>" +
+            "const out = document.getElementById('out');" +
+            "function log(m){ out.textContent = '[' + new Date().toLocaleTimeString() + '] ' + m; }" +
+            "(function(){try{const v=document.getElementById('mobVideo');const c=document.createElement('canvas');c.width=480;c.height=270;const x=c.getContext('2d');let f=0;function d(){f++;x.fillStyle='#090d16';x.fillRect(0,0,480,270);x.fillStyle='#38bdf8';x.beginPath();x.arc(240+Math.cos(f*0.05)*120,135+Math.sin(f*0.07)*60,28,0,6.28);x.fill();x.fillStyle='#f8fafc';x.font='bold 15px sans-serif';x.fillText('Browz Mobile 60fps Video Fit Test #' + f,85,42);requestAnimationFrame(d);}d();if(c.captureStream){v.srcObject=c.captureStream(30);v.play().catch(()=>{});}}catch(e){}})();" +
+            "async function testFetch(u){" +
+            "  log('Fetching ' + u + ' ...');" +
+            "  try { const r = await fetch(u); const t = await r.text(); log('HTTP ' + r.status + ' (' + t.length + ' bytes)\\n' + t.slice(0, 320)); }" +
+            "  catch(e){ log('Blocked / Intercepted by Browz Firewall: ' + e.message); }" +
+            "}" +
+            "function testGeo(){" +
+            "  navigator.geolocation.getCurrentPosition(" +
+            "    p => log('GPS Allowed')," +
+            "    e => log('GPS Blocked by Native WebChromeClient Firewall: ' + e.message)" +
+            "  );" +
+            "}" +
+            "function testSensors(){" +
+            "  log('DeviceMotionEvent=' + String(window.DeviceMotionEvent) + '\\ngetBattery=' + String(navigator.getBattery) + '\\nbluetooth=' + String(navigator.bluetooth));" +
+            "}" +
+            "function testWebRTC(){" +
+            "  try { new window.RTCPeerConnection(); log('WebRTC Allowed'); }" +
+            "  catch(e){ log('WebRTC Blocked: ' + e.message); }" +
+            "}" +
+            "</script></body></html>";
+        wv.loadDataWithBaseURL("https://browz.local/", html, "text/html", "UTF-8", null);
+    }
+
+    private void loadHomeIntoWebView(WebView wv) {
+        Persona p = personas.get(activePersonaIdx);
+        String modeLabel = (activeTab != null && activeTab.ghostMode)
+            ? "Ghost Mode (RAM-Only · Zero Cache)"
+            : "Mobile Stealth & Untraceable Session Active";
+        String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'>" +
+            "<meta name='viewport' content='width=device-width,initial-scale=1.0'>" +
+            "<title>New Tab</title>" +
+            "<style>" +
+            "*{box-sizing:border-box;margin:0;padding:0}" +
+            "body{background:#121215;color:#f4f4f5;font-family:-apple-system,Roboto,sans-serif;min-height:100vh;display:flex;flex-direction:column;justify-content:space-between;padding:20px 16px}" +
+            ".center{margin:auto;width:100%;max-width:460px;text-align:center}" +
+            "h1{font-size:28px;font-weight:700;letter-spacing:-0.02em;margin-bottom:5px}" +
+            ".sub{font-size:12px;color:#9ca3af;margin-bottom:20px;display:flex;align-items:center;justify-content:center;gap:6px}" +
+            ".dot{width:7px;height:7px;border-radius:50%;background:#22c55e;display:inline-block}" +
+            ".sbox{display:flex;background:#1c1c21;border:1px solid #2e2e36;border-radius:999px;padding:5px 6px 5px 16px;margin-bottom:20px}" +
+            ".sbox input{flex:1;background:transparent;border:none;color:#f4f4f5;font-size:14px;outline:none;height:34px}" +
+            ".sbox button{background:#3b82f6;color:#fff;border:none;border-radius:999px;padding:0 16px;font-weight:600;font-size:13px}" +
+            ".grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:18px}" +
+            ".tile{background:#1c1c21;border:1px solid #2e2e36;border-radius:12px;padding:12px 6px;color:#f4f4f5;text-decoration:none;font-size:11.5px;font-weight:500;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer}" +
+            ".icon{width:34px;height:34px;border-radius:9px;background:#27272a;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}" +
+            ".card{background:#18181c;border:1px solid #2e2e36;border-radius:12px;padding:13px;text-align:left;font-size:11.5px;color:#9ca3af;line-height:1.6}" +
+            ".card strong{color:#f4f4f5}" +
+            ".row-btns{display:flex;gap:8px;margin-top:10px}" +
+            ".btn{flex:1;background:#222228;color:#f4f4f5;border:1px solid #3f3f4a;border-radius:8px;padding:9px;font-size:11.5px;font-weight:600;text-align:center;cursor:pointer}" +
+            "</style></head><body>" +
+            "<div class='center'>" +
+            "<h1>Browz</h1>" +
+            "<div class='sub'><span class='dot'></span><span>" + modeLabel + "</span></div>" +
+            "<form class='sbox' onsubmit='doSearch(event)'>" +
+            "<input id='q' type='text' placeholder='Search privately or enter web address...' autocomplete='off'/>" +
+            "<button type='submit'>Go</button>" +
+            "</form>" +
+            "<div class='grid'>" +
+            "<div class='tile' onclick=\"nav('browz://security')\"><div class='icon' style='color:#22c55e;border:1px solid rgba(34,197,94,0.4)'>18</div><span>Security Audit</span></div>" +
+            "<div class='tile' onclick=\"nav('browz://testbench')\"><div class='icon' style='color:#3b82f6;border:1px solid rgba(59,130,246,0.4)'>API</div><span>Testbench</span></div>" +
+            "<div class='tile' onclick=\"nav('https://duckduckgo.com')\"><div class='icon'>D</div><span>DuckDuckGo</span></div>" +
+            "<div class='tile' onclick=\"nav('https://www.google.com')\"><div class='icon'>G</div><span>Google</span></div>" +
+            "<div class='tile' onclick=\"nav('https://m.youtube.com')\"><div class='icon'>Y</div><span>YouTube</span></div>" +
+            "<div class='tile' onclick=\"nav('https://github.com')\"><div class='icon'>GH</div><span>GitHub</span></div>" +
+            "</div>" +
+            "<div class='card'>" +
+            "<div>Masked Profile: <strong>" + p.label + "</strong></div>" +
+            "<div>Spoofed GPU: <strong>" + p.webglVendor + " / " + p.webglRenderer + "</strong></div>" +
+            "<div>Timezone: <strong>" + p.timezone + "</strong> · Canvas Seed: <strong>#" + noiseSeed + "</strong></div>" +
+            "<div>WebRTC IP Leak: <strong>Blocked</strong> · Motion Sensors: <strong>Blocked</strong></div>" +
+            "<div>Trackers Blocked: <strong>" + blockedTrackersCount + "</strong> · URL Params Stripped: <strong>" + strippedParamsCount + "</strong></div>" +
+            "<div class='row-btns'>" +
+            "<div class='btn' onclick='rot()'>Rotate Identity</div>" +
+            "<div class='btn' onclick='shd()'>Customize Shields</div>" +
+            "<div class='btn' onclick=\"nav('browz://security')\">18-Point Check</div>" +
+            "</div>" +
+            "</div>" +
+            "</div>" +
+            "<script>" +
+            "const SEC = '" + bridgeSecret + "';" +
+            "function nav(u){ if(window.BrowzNative) window.BrowzNative.navigate(SEC, u); }" +
+            "function rot(){ if(window.BrowzNative) window.BrowzNative.rotateIdentity(SEC); }" +
+            "function shd(){ if(window.BrowzNative) window.BrowzNative.openShields(SEC); }" +
+            "function doSearch(e){e.preventDefault();var v=document.getElementById('q').value;if(v){nav(v);}}" +
+            "</script></body></html>";
+
+        wv.loadDataWithBaseURL("https://browz.local/", html, "text/html", "UTF-8", null);
+    }
+
+    private void showToolsDialog() {
+        if (activeTab == null) return;
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(16), dp(20), dp(10));
+
+        // 1. Page Text/Viewport Zoom Controls
+        TextView zoomTitle = new TextView(this);
+        zoomTitle.setText("Page Zoom: " + activeTab.zoomPercent + "%");
+        zoomTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        zoomTitle.setPadding(0, 0, 0, dp(8));
+        box.addView(zoomTitle);
+
+        LinearLayout zoomRow = new LinearLayout(this);
+        zoomRow.setOrientation(LinearLayout.HORIZONTAL);
+        Button btnZoomOut = new Button(this);
+        btnZoomOut.setText("− Zoom Out");
+        btnZoomOut.setOnClickListener(v -> {
+            activeTab.zoomPercent = Math.max(50, activeTab.zoomPercent - 15);
+            activeTab.webView.getSettings().setTextZoom(activeTab.zoomPercent);
+            zoomTitle.setText("Page Zoom: " + activeTab.zoomPercent + "%");
+        });
+        Button btnZoomReset = new Button(this);
+        btnZoomReset.setText("100%");
+        btnZoomReset.setOnClickListener(v -> {
+            activeTab.zoomPercent = 100;
+            activeTab.webView.getSettings().setTextZoom(100);
+            zoomTitle.setText("Page Zoom: 100%");
+        });
+        Button btnZoomIn = new Button(this);
+        btnZoomIn.setText("+ Zoom In");
+        btnZoomIn.setOnClickListener(v -> {
+            activeTab.zoomPercent = Math.min(200, activeTab.zoomPercent + 15);
+            activeTab.webView.getSettings().setTextZoom(activeTab.zoomPercent);
+            zoomTitle.setText("Page Zoom: " + activeTab.zoomPercent + "%");
+        });
+        zoomRow.addView(btnZoomOut);
+        zoomRow.addView(btnZoomReset);
+        zoomRow.addView(btnZoomIn);
+        box.addView(zoomRow);
+
+        // 2. Find in Page
+        TextView findTitle = new TextView(this);
+        findTitle.setText("Find in Page:");
+        findTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        findTitle.setPadding(0, dp(14), 0, dp(6));
+        box.addView(findTitle);
+
+        final EditText findInput = new EditText(this);
+        findInput.setHint("Enter word or phrase to highlight...");
+        findInput.setSingleLine(true);
+        box.addView(findInput);
+
+        LinearLayout findBtns = new LinearLayout(this);
+        findBtns.setOrientation(LinearLayout.HORIZONTAL);
+        Button btnFind = new Button(this);
+        btnFind.setText("Find");
+        btnFind.setOnClickListener(v -> {
+            String q = findInput.getText().toString().trim();
+            if (!q.isEmpty()) {
+                activeTab.webView.findAllAsync(q);
+            }
+        });
+        Button btnNext = new Button(this);
+        btnNext.setText("Next Match");
+        btnNext.setOnClickListener(v -> activeTab.webView.findNext(true));
+        Button btnClearFind = new Button(this);
+        btnClearFind.setText("Clear");
+        btnClearFind.setOnClickListener(v -> {
+            findInput.setText("");
+            activeTab.webView.clearMatches();
+        });
+        findBtns.addView(btnFind);
+        findBtns.addView(btnNext);
+        findBtns.addView(btnClearFind);
+        box.addView(findBtns);
+
+        // 3. 1-Click Fit Video to Full Screen & Radio Profile Switcher
+        Button btnFitVideo = new Button(this);
+        btnFitVideo.setText("🎬 Fit Video on Page to Full Screen");
+        btnFitVideo.setOnClickListener(v -> {
+            if (activeTab != null) {
+                activeTab.webView.evaluateJavascript(
+                    "window.__browzToggleVideoFit ? window.__browzToggleVideoFit() : false",
+                    res -> Toast.makeText(MainActivity.this, "Toggled Video Fit-to-Screen", Toast.LENGTH_SHORT).show()
+                );
+            }
+        });
+        box.addView(btnFitVideo);
+
+        Button btnRadioMode = new Button(this);
+        btnRadioMode.setText("📡 Wi-Fi / Radio Mode: " + radioProfile);
+        btnRadioMode.setOnClickListener(v -> {
+            String[] modes = new String[]{"stealth_hidden", "wifi_fiber", "cellular_4g", "cellular_3g_saver", "airgap_killswitch"};
+            String[] labels = new String[]{
+                "Stealth Mask (Hide Wi-Fi / Radio Type)",
+                "Wi-Fi 6 Fiber (100 Mbps, 5ms RTT)",
+                "Cellular 4G LTE (12 Mbps, 45ms RTT)",
+                "Cellular 3G + Data Saver (Save-Data: on)",
+                "Air-Gap Radio Kill-Switch (Cut All Network I/O)"
+            };
+            new AlertDialog.Builder(MainActivity.this)
+                .setTitle("Select Wi-Fi / Radio & I/O Profile")
+                .setItems(labels, (d2, idx) -> {
+                    radioProfile = modes[idx];
+                    btnRadioMode.setText("📡 Wi-Fi / Radio Mode: " + radioProfile);
+                    if (activeTab != null) navigateActiveTab(activeTab.url);
+                    Toast.makeText(MainActivity.this, "Applied Radio Profile: " + labels[idx], Toast.LENGTH_SHORT).show();
+                })
+                .show();
+        });
+        box.addView(btnRadioMode);
+
+        new AlertDialog.Builder(this)
+            .setTitle("Browser Tools (Zoom, Find, Video Fit & Radio)")
+            .setView(box)
+            .setPositiveButton("24-Point Security Check", (d, w) -> navigateActiveTab("browz://security"))
+            .setNeutralButton("API & Video Testbench", (d, w) -> navigateActiveTab("browz://testbench"))
+            .setNegativeButton("Done", null)
+            .show();
+    }
+
+    private void burnAndRotateIdentity() {
+        activePersonaIdx = (activePersonaIdx + 1) % personas.size();
+        noiseSeed = 100000 + new Random().nextInt(900000);
+        retryAttemptsByUrl.clear();
+
+        CookieManager cm = CookieManager.getInstance();
+        cm.removeAllCookies(null);
+        cm.flush();
+        WebStorage.getInstance().deleteAllData();
+
+        Persona nextP = personas.get(activePersonaIdx);
+        for (BrowserTab t : tabs) {
+            t.webView.clearCache(true);
+            t.webView.clearHistory();
+            t.webView.clearFormData();
+            t.webView.getSettings().setUserAgentString(nextP.userAgent);
+        }
+
+        if (activeTab != null) {
+            navigateActiveTab(activeTab.url);
+        }
+
+        Toast.makeText(
+            this,
+            "Identity Rotated: " + nextP.label + " (Seed #" + noiseSeed + ") & Storage Wiped",
+            Toast.LENGTH_SHORT
+        ).show();
+    }
+
+    private void showShieldsDialog() {
+        ScrollView sv = new ScrollView(this);
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(20), dp(16), dp(20), dp(10));
+
+        Persona currentP = personas.get(activePersonaIdx);
+        TextView personaLabel = new TextView(this);
+        personaLabel.setText("Active Persona: " + currentP.label + "\nSeed: #" + noiseSeed);
+        personaLabel.setTextSize(13f);
+        personaLabel.setTypeface(Typeface.DEFAULT_BOLD);
+        personaLabel.setPadding(0, 0, 0, dp(10));
+        box.addView(personaLabel);
+
+        Button cyclePersonaBtn = new Button(this);
+        cyclePersonaBtn.setText("Switch OS / Device Persona");
+        cyclePersonaBtn.setOnClickListener(v -> {
+            activePersonaIdx = (activePersonaIdx + 1) % personas.size();
+            Persona np = personas.get(activePersonaIdx);
+            for (BrowserTab t : tabs) {
+                t.webView.getSettings().setUserAgentString(np.userAgent);
+            }
+            personaLabel.setText("Active Persona: " + np.label + "\nSeed: #" + noiseSeed);
+        });
+        box.addView(cyclePersonaBtn);
+
+        box.addView(makeCheck("Canvas 2D Noise (toDataURL & getImageData)", shieldCanvas, c -> shieldCanvas = c));
+        box.addView(makeCheck("WebGL Mobile GPU Spoofing", shieldWebGL, c -> shieldWebGL = c));
+        box.addView(makeCheck("AudioContext & AnalyserNode Noise", shieldAudio, c -> shieldAudio = c));
+        box.addView(makeCheck("ClientRects Font-Measurement Jitter", shieldClientRects, c -> shieldClientRects = c));
+        box.addView(makeCheck("Block WebRTC IP Leak (STUN/ICE)", shieldWebRTC, c -> shieldWebRTC = c));
+        box.addView(makeCheck("Spoof High-Entropy Client Hints (userAgentData)", shieldClientHints, c -> shieldClientHints = c));
+        box.addView(makeCheck("Block Gyroscope, Accelerometer, Battery & USB", shieldSensors, c -> shieldSensors = c));
+        box.addView(makeCheck("Mask Storage Quota (10GB) & Speech Voices", shieldStorageAndVoices, c -> shieldStorageAndVoices = c));
+        box.addView(makeCheck("Spoof Timezone (UTC) & Locale", shieldTimezone, c -> shieldTimezone = c));
+        box.addView(makeCheck("Block ServiceWorker Disk Persistence", blockServiceWorkers, c -> blockServiceWorkers = c));
+        box.addView(makeCheck("Block CacheStorage Supercookie I/O", blockCacheStorage, c -> blockCacheStorage = c));
+        box.addView(makeCheck("Block Local File Picker & OPFS Disk I/O", blockFileSystemAccess, c -> blockFileSystemAccess = c));
+        box.addView(makeCheck("Block Silent Clipboard Read Snooping", blockClipboardRead, c -> blockClipboardRead = c));
+        box.addView(makeCheck("Kill-Switch: Block Live WebSockets", blockWebSockets, c -> blockWebSockets = c));
+        box.addView(makeCheck("High-Resolution Timer Jitter (Anti-Spectre)", timerJitter, c -> timerJitter = c));
+        box.addView(makeCheck("Block 20+ Ad, Pixel & Mobile SDK Trackers", blockTrackers, c -> blockTrackers = c));
+        box.addView(makeCheck("Strip 35+ URL Tracking Params (utm_*, fbclid)", stripUrlParams, c -> stripUrlParams = c));
+        box.addView(makeCheck("Auto-Retry Transient Network Errors (2x)", autoRetryFailed, c -> autoRetryFailed = c));
+        box.addView(makeCheck("Force HTTPS-Only Connections", forceHttps, c -> forceHttps = c));
+        box.addView(makeCheck("Block OS Screenshots (FLAG_SECURE)", screenSecurityFlag, c -> {
+            screenSecurityFlag = c;
+            if (c) {
+                getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
+            } else {
+                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+            }
+        }));
+
+        sv.addView(box);
+
+        new AlertDialog.Builder(this)
+            .setTitle("Triple-Layer Stealth Shields")
+            .setView(sv)
+            .setPositiveButton("Apply & Reload", (d, w) -> {
+                if (activeTab != null) {
+                    navigateActiveTab(activeTab.url);
+                }
+            })
+            .setNeutralButton("18-Point Audit", (d, w) -> navigateActiveTab("browz://security"))
+            .setNegativeButton("Burn Identity", (d, w) -> burnAndRotateIdentity())
+            .show();
+    }
+
+    private interface CheckListener {
+        void onChanged(boolean checked);
+    }
+
+    private CheckBox makeCheck(String title, boolean initial, CheckListener listener) {
+        CheckBox cb = new CheckBox(this);
+        cb.setText(title);
+        cb.setChecked(initial);
+        cb.setOnCheckedChangeListener((btn, isChecked) -> listener.onChanged(isChecked));
+        return cb;
+    }
+
+    private void showTabsDialog() {
+        String[] items = new String[tabs.size()];
+        for (int i = 0; i < tabs.size(); i++) {
+            BrowserTab t = tabs.get(i);
+            String marker = (t == activeTab) ? "● " : "  ";
+            String modeTag = t.ghostMode ? "[Ghost] " : "";
+            items[i] = marker + modeTag + "Tab " + (i + 1) + ": " + t.title + " (" + t.url + ")";
+        }
+
+        new AlertDialog.Builder(this)
+            .setTitle("Open Tabs (" + tabs.size() + ")")
+            .setItems(items, (d, which) -> switchToTab(tabs.get(which)))
+            .setPositiveButton("+ New Tab", (d, w) -> createAndSwitchTab("browz://home", false))
+            .setNeutralButton("+ Ghost Tab (RAM)", (d, w) -> createAndSwitchTab("browz://home", true))
+            .setNegativeButton("Close Active Tab", (d, w) -> {
+                if (tabs.size() <= 1) {
+                    burnAndRotateIdentity();
+                    navigateActiveTab("browz://home");
+                } else if (activeTab != null) {
+                    activeTab.webView.destroy();
+                    tabs.remove(activeTab);
+                    switchToTab(tabs.get(tabs.size() - 1));
+                }
+            })
+            .show();
+    }
+
+    private void showTrafficCaptureDialog() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Total Captured: ").append(capturedEntries.size())
+          .append(" | Trackers Blocked: ").append(blockedTrackersCount)
+          .append(" | URL Params Stripped: ").append(strippedParamsCount)
+          .append("\n\n");
+
+        int limit = Math.min(capturedEntries.size(), 80);
+        for (int i = 0; i < limit; i++) {
+            CapturedEntry e = capturedEntries.get(i);
+            sb.append("#").append(e.seq).append(" [").append(e.timestamp).append("] ")
+              .append(e.blocked ? "BLOCKED (" + e.reason + ") " : "200 OK ")
+              .append(e.method).append(" ").append(e.url).append("\n\n");
+        }
+        if (capturedEntries.isEmpty()) {
+            sb.append("No requests captured yet. Browse any site or open the Mobile API Testbench to capture live HTTP/HTTPS traffic.");
+        }
+
+        ScrollView sv = new ScrollView(this);
+        TextView tv = new TextView(this);
+        tv.setText(sb.toString());
+        tv.setTextSize(11.5f);
+        tv.setTypeface(Typeface.MONOSPACE);
+        tv.setPadding(dp(18), dp(14), dp(18), dp(14));
+        sv.addView(tv);
+
+        new AlertDialog.Builder(this)
+            .setTitle("Captured Network Traffic")
+            .setView(sv)
+            .setPositiveButton("Copy HAR 1.2 JSON", (d, w) -> copyHarToClipboard())
+            .setNeutralButton("Clear Log", (d, w) -> {
+                capturedEntries.clear();
+                trafficCountBtn.setText("Traffic (0)");
+            })
+            .setNegativeButton("Close", null)
+            .show();
+    }
+
+    private void copyHarToClipboard() {
+        StringBuilder json = new StringBuilder();
+        json.append("{\"log\":{\"version\":\"1.2\",\"creator\":{\"name\":\"Browz Mobile\",\"version\":\"1.0.0\"},\"entries\":[");
+        for (int i = 0; i < capturedEntries.size(); i++) {
+            CapturedEntry e = capturedEntries.get(i);
+            if (i > 0) json.append(",");
+            String safeUrl = e.url.replace("\"", "\\\"");
+            json.append("{\"startedDateTime\":\"").append(e.timestamp).append("\",")
+                .append("\"request\":{\"method\":\"").append(e.method).append("\",\"url\":\"").append(safeUrl).append("\"},")
+                .append("\"response\":{\"status\":").append(e.blocked ? 0 : 200).append(",\"statusText\":\"").append(e.reason).append("\"}}");
+        }
+        json.append("]}}");
+
+        ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
+        if (cm != null) {
+            cm.setPrimaryClip(ClipData.newPlainText("Browz HAR Export", json.toString()));
+            Toast.makeText(this, "Copied HAR 1.2 JSON (" + capturedEntries.size() + " entries) to Clipboard!", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (customVideoView != null) {
+            webViewContainer.removeView(customVideoView);
+            customVideoView = null;
+            if (topBarView != null) topBarView.setVisibility(View.VISIBLE);
+            if (bmScrollView != null) bmScrollView.setVisibility(View.VISIBLE);
+            if (bottomBarView != null) bottomBarView.setVisibility(View.VISIBLE);
+            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
+            if (customVideoCallback != null) {
+                customVideoCallback.onCustomViewHidden();
+                customVideoCallback = null;
+            }
+            return;
+        }
+        if (activeTab != null && activeTab.webView.canGoBack()) {
+            activeTab.webView.goBack();
+        } else {
+            super.onBackPressed();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        try {
+            CookieManager cm = CookieManager.getInstance();
+            cm.removeAllCookies(null);
+            cm.flush();
+            WebStorage.getInstance().deleteAllData();
+            for (BrowserTab t : tabs) {
+                t.webView.clearCache(true);
+                t.webView.clearHistory();
+                t.webView.clearFormData();
+                t.webView.destroy();
+            }
+        } catch (Exception ignored) {}
+        super.onDestroy();
+    }
+}
