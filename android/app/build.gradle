@@ -1,0 +1,45 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.browz.mobile'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.browz.mobile"
+        minSdk 24
+        targetSdk 34
+        versionCode 102
+        versionName "1.0.2"
+    }
+
+    signingConfigs {
+        release {
+            storeFile file("browz-release.p12")
+            storePassword "browzstealth2026"
+            keyAlias "browzkey"
+            keyPassword "browzstealth2026"
+            storeType "PKCS12"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+        debug {
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // Zero third-party SDKs — 100% pure Android SDK for maximum privacy & zero telemetry
+}

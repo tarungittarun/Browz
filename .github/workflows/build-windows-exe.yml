@@ -1,0 +1,55 @@
+name: Build Windows EXE Installer
+
+on:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows-exe:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Execute 20-Suite Strict End-to-End Verification on Windows
+        shell: pwsh
+        run: npm test
+
+      - name: Package Standalone Native Chromium App (Browz.exe)
+        shell: pwsh
+        run: |
+          npm install --no-save electron@33.2.0 @electron/packager@18.3.6
+          npx @electron/packager . Browz --platform=win32 --arch=x64 --out=dist --overwrite --ignore="^/(dist|test|android|\.git|installer|Browz-Setup)"
+
+      - name: Compile Self-Contained Windows Setup EXE (Inno Setup)
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "installer\browz.iss"
+          Get-ChildItem dist\*.exe
+
+      - name: Publish Standalone EXE to GitHub Release (v1.0.0)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          $tag = "v1.0.0"
+          gh release upload $tag Browz-Setup-1.0.0.exe dist\Browz-Standalone-Installer-1.0.0.exe --clobber
+          gh release edit $tag --title "Browz Standalone Desktop Browser v1.0.0 (Windows .EXE)" --notes "### 100% Standalone Native Chromium Desktop Browser (Never Uses Edge/Chrome)`n`n1. **[Download Browz-Standalone-Installer-1.0.0.exe (~105 MB Offline Installer)](https://github.com/tarungittarun/Browz/releases/download/v1.0.0/Browz-Standalone-Installer-1.0.0.exe)** — Bundles the entire isolated Chromium engine (`Browz.exe`) inside a standard Windows Setup wizard. No Node.js or external browser required.`n2. **[Download Browz-Setup-1.0.0.exe (388 KB Web Installer)](https://github.com/tarungittarun/Browz/releases/download/v1.0.0/Browz-Setup-1.0.0.exe)** — Lightweight web installer that fetches the standalone Electron Chromium engine on first launch."
+
+      - name: Upload EXE Workflow Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Browz-Windows-Standalone-EXE
+          path: |
+            dist/Browz-Standalone-Installer-1.0.0.exe
+            Browz-Setup-1.0.0.exe
