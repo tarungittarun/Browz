@@ -1978,7 +1978,15 @@ public class MainActivity extends Activity {
             "})();";
     }
 
+    private static final int MAX_TABS = 20;
+
     private void createAndSwitchTab(String url, boolean ghostMode) {
+        if (tabs.size() >= MAX_TABS) {
+            // Every tab is a live WebView; an unbounded list would let a page (or an
+            // impatient user) exhaust memory and get the whole process killed.
+            Toast.makeText(this, "Tab limit reached (" + MAX_TABS + "). Close a tab first.", Toast.LENGTH_LONG).show();
+            return;
+        }
         WebView wv = buildHardenedWebView(ghostMode);
         BrowserTab tab = new BrowserTab(tabIdCounter++, wv, ghostMode);
         tabs.add(tab);
@@ -2726,6 +2734,16 @@ public class MainActivity extends Activity {
             activeTab.webView.goBack();
         } else {
             super.onBackPressed();
+        }
+    }
+
+    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (level >= TRIM_MEMORY_MODERATE) {
+            for (BrowserTab tab : new ArrayList<>(tabs)) {
+                tab.webView.clearCache(false);
+            }
         }
     }
 

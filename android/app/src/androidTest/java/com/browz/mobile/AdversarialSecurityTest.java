@@ -175,7 +175,15 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
             WebResourceResponse ordinary = client.shouldInterceptRequest(wv,
                     new FakeRequest("https://example.org/article", "GET", true));
             results[4] = ordinary == null;
-            results[5] = true;
+            // Alternative spellings of loopback that naive filters miss.
+            results[5] = client.shouldInterceptRequest(wv,
+                    new FakeRequest("http://[::1]:8080/", "GET", true)) != null
+                    && client.shouldInterceptRequest(wv,
+                    new FakeRequest("http://0x7f000001/", "GET", true)) != null
+                    && client.shouldInterceptRequest(wv,
+                    new FakeRequest("http://2130706433/", "GET", true)) != null
+                    && client.shouldInterceptRequest(wv,
+                    new FakeRequest("http://localhost.localdomain/", "GET", true)) != null;
             results[6] = true;
         });
         assertTrue("analytics request must be intercepted", results[0]);
@@ -183,6 +191,7 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         assertTrue("cloud metadata SSRF must be blocked", results[2]);
         assertTrue("NUL-byte host confusion must be blocked", results[3]);
         assertTrue("ordinary page requests must be forwarded untouched", results[4]);
+        assertTrue("IPv6, hex, decimal and localhost aliases of loopback must be blocked", results[5]);
     }
 
     public void testUserRulesOverrideBuiltInTrackerList() throws Throwable {
@@ -305,6 +314,15 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         Thread.sleep(600);
         assertNotSame("the genuine secret must be able to rotate identity",
                 personaBefore, ((Integer) field(activity, "activePersonaIdx")).intValue());
+    }
+
+    public void testTabCountIsBounded() throws Throwable {
+        final MainActivity activity = getActivity();
+        for (int i = 0; i < 30; i++) {
+            onUi(() -> call(activity, "createAndSwitchTab", "browz://home", false));
+        }
+        List<?> tabs = (List<?>) field(activity, "tabs");
+        assertTrue("live WebViews must stay bounded, found " + tabs.size(), tabs.size() <= 20);
     }
 
     // ---------- download policy ----------
