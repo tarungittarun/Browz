@@ -893,35 +893,16 @@ public class MainActivity extends Activity {
                     return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
                 }
 
-                // SECURITY: Block cloud metadata SSRF, localhost loopback probing, NUL-byte/Fullwidth DNS exploits (CVE-2026-105482/105483) & unsafe schemes
-                String cleanHost = host.replace("[", "").replace("]", "");
+                // SECURITY: block loopback, link-local, cloud-metadata and local
+                // aliases, including IPv6, hex and decimal spellings of the same
+                // address, plus NUL-byte and fullwidth-DNS tricks.
                 String lowUrl = reqUrl.toLowerCase(Locale.ROOT);
                 if ("file".equals(scheme) || "content".equals(scheme) ||
                     lowUrl.contains("%00") || lowUrl.contains("%ef%bc%9") ||
-                    "169.254.169.254".equals(cleanHost) || cleanHost.startsWith("169.254.") ||
-                    "metadata.google.internal".equals(cleanHost) || "100.100.100.200".equals(cleanHost) ||
-                    "0.0.0.0".equals(cleanHost) || "127.0.0.1".equals(cleanHost) || "localhost".equals(cleanHost) ||
-                    "::1".equals(cleanHost) || cleanHost.startsWith("0x") || cleanHost.matches("^\\d+$")) {
+                    isBlockedLocalHost(host)) {
                     blockedTrackersCount++;
                     recordRequest(method, reqUrl, host, true, "Blocked SSRF / Loopback / Local Resource");
                     return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
-                }
-
-                // User network rules: an explicit site allow wins over the tracker list,
-                // an explicit block prevents the request from leaving the device at all.
-                if (!host.isEmpty() && matchesDomainRule(host, allowedDomainRules)) {
-                    recordRequest(method, reqUrl, host, false, "Allowed by site rule");
-                    maybeProbeStatus(request, reqUrl);
-                    return super.shouldInterceptRequest(view, request);
-                }
-                if (!host.isEmpty() && matchesDomainRule(host, blockedDomainRules)) {
-                    blockedTrackersCount++;
-                    recordRequest(method, reqUrl, host, true, "Blocked by site rule");
-                    return new WebResourceResponse(
-                        "text/plain",
-                        "UTF-8",
-                        new ByteArrayInputStream(new byte[0])
-                    );
                 }
 
                 if (blockTrackers && !host.isEmpty()) {
@@ -1193,6 +1174,56 @@ public class MainActivity extends Activity {
             finalUrl = "https://" + finalUrl.substring(7);
         }
         return finalUrl;
+    }
+
+    /** True when a host points at this device, the local link or a cloud metadata service. */
+    private static boolean isBlockedLocalHost(String rawHost) {
+        if (rawHost == null) return false;
+        String h = rawHost.toLowerCase(Locale.ROOT).replace("[", "").replace("]", "").trim();
+        while (h.endsWith(".")) h = h.substring(0, h.length() - 1);
+        if (h.isEmpty()) return false;
+        if ("localhost".equals(h) || "ip6-localhost".equals(h)
+                || "localhost.localdomain".equals(h) || h.endsWith(".localhost")
+                || "metadata.google.internal".equals(h)) {
+            return true;
+        }
+        if ("::1".equals(h) || "::".equals(h) || "0:0:0:0:0:0:0:1".equals(h)
+                || h.startsWith("fe80:")) {
+            return true;
+        }
+        if (h.startsWith("::ffff:")) h = h.substring(7);
+        int[] octets = ipv4Octets(h);
+        if (octets == null) return false;
+        if (octets[0] == 127 || octets[0] == 0) return true;          // loopback, "this network"
+        if (octets[0] == 169 && octets[1] == 254) return true;         // link-local + metadata
+        return octets[0] == 100 && octets[1] == 100 && octets[2] == 100 && octets[3] == 200;
+    }
+
+    /** Parses dotted, decimal or hex IPv4 into four octets; null when it is not an IP. */
+    private static int[] ipv4Octets(String host) {
+        if (host.matches("^\\d+$") || host.startsWith("0x")) {
+            long value;
+            try {
+                value = host.startsWith("0x")
+                        ? Long.parseLong(host.substring(2), 16)
+                        : Long.parseLong(host);
+            } catch (NumberFormatException e) {
+                return null;
+            }
+            if (value < 0 || value > 0xFFFFFFFFL) return null;
+            return new int[]{(int) ((value >> 24) & 0xFF), (int) ((value >> 16) & 0xFF),
+                    (int) ((value >> 8) & 0xFF), (int) (value & 0xFF)};
+        }
+        String[] parts = host.split("\\.");
+        if (parts.length != 4) return null;
+        int[] octets = new int[4];
+        for (int i = 0; i < 4; i++) {
+            if (!parts[i].matches("^\\d{1,3}$")) return null;
+            int value = Integer.parseInt(parts[i]);
+            if (value > 255) return null;
+            octets[i] = value;
+        }
+        return octets;
     }
 
     private synchronized void clearRequestLog() {

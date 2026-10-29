@@ -194,6 +194,28 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         assertTrue("IPv6, hex, decimal and localhost aliases of loopback must be blocked", results[5]);
     }
 
+    public void testLocalHostDetectionCoversAliases() throws Throwable {
+        Method m = MainActivity.class.getDeclaredMethod("isBlockedLocalHost", String.class);
+        m.setAccessible(true);
+        String[] blocked = {
+                "127.0.0.1", "127.1.2.3", "0.0.0.0", "169.254.169.254", "100.100.100.200",
+                "localhost", "LOCALHOST.", "localhost.localdomain", "app.localhost",
+                "::1", "[::1]", "0:0:0:0:0:0:0:1", "::ffff:127.0.0.1",
+                "0x7f000001", "2130706433", "metadata.google.internal",
+        };
+        String[] allowed = {
+                "example.com", "notlocalhost.example", "10.0.0.5", "192.168.1.1",
+                "172.16.0.1", "1.1.1.1", "browz.local", "",
+        };
+        for (String host : blocked) {
+            assertEquals("should block " + host, Boolean.TRUE, m.invoke(null, host));
+        }
+        for (String host : allowed) {
+            assertEquals("should allow " + host, Boolean.FALSE, m.invoke(null, host));
+        }
+        assertEquals("null host must not throw", Boolean.FALSE, m.invoke(null, (String) null));
+    }
+
     public void testUserRulesOverrideBuiltInTrackerList() throws Throwable {
         final MainActivity activity = getActivity();
         @SuppressWarnings("unchecked")
