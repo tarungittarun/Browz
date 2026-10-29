@@ -267,6 +267,84 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         return ctor.newInstance(id, name);
     }
 
+    // ---------- session data must not survive a relaunch ----------
+
+    public void testSessionCookieDoesNotSurviveRelaunch() throws Throwable {
+        final MainActivity first = getActivity();
+        final CookieManager cm = CookieManager.getInstance();
+        cm.setAcceptCookie(true);
+        cm.setCookie("https://bank.example", "session=secret; Path=/");
+        cm.flush();
+        assertNotNull("harness could not plant a cookie", cm.getCookie("https://bank.example"));
+
+        // Simulate an unclean end: the flag stays set because onDestroy is not reached.
+        first.getPreferences(Context.MODE_PRIVATE).edit().putBoolean("sessionOpen", true).apply();
+        onUi(first::finish);
+
+        Context target = getInstrumentation().getTargetContext();
+        android.content.Intent intent = new android.content.Intent(target, MainActivity.class)
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+        MainActivity relaunched = (MainActivity) getInstrumentation().startActivitySync(intent);
+        try {
+            getInstrumentation().waitForIdleSync();
+            String after = cm.getCookie("https://bank.example");
+            assertNull("a cookie must not survive into the next session, got: " + after, after);
+        } finally {
+            onUi(relaunched::finish);
+        }
+    }
+
+    // ---------- fuzz the input handling ----------
+
+    public void testDomainRuleNormalisationFuzz() throws Throwable {
+        MainActivity activity = getActivity();
+        String[][] cases = {
+                {"https://ADS.Example.com/path?x=1", "ads.example.com"},
+                {"http://sub.example.org:8080/a", "sub.example.org"},
+                {"example.net", "example.net"},
+                {"  spaced.example  ", "spaced.example"},
+                {"https://user:pass@host.example/x", "host.example"},
+                {"javascript:alert(1)", ""},
+                {"", ""},
+                {"localhost", ""},
+                {"a b.com", ""},
+                {"https://", ""},
+                {"127.0.0.1", "127.0.0.1"},
+                {"https://xn--bcher-kva.example", "xn--bcher-kva.example"},
+                {"data:text/html,<script>", ""},
+                {"-bad.example", ""},
+                {"good-.example", ""},
+                {"example.com.", "example.com"},
+        };
+        for (String[] c : cases) {
+            Object out = call(activity, "normalizeDomainRule", c[0]);
+            String expected = c[1];
+            if (out == null) {
+                assertEquals("normalizeDomainRule(" + c[0] + ") returned null, expected '" + expected + "'",
+                        expected, "");
+            } else {
+                assertEquals("normalizeDomainRule(" + c[0] + ")", expected, out);
+            }
+        }
+    }
+
+    public void testTrackerMatchingIsSuffixSafe() throws Throwable {
+        MainActivity activity = getActivity();
+        Object rules = field(activity, "blockedDomainRules");
+        java.util.Set<String> set = new java.util.HashSet<>();
+        set.add("evil.test");
+        java.lang.reflect.Method m = MainActivity.class.getDeclaredMethod(
+                "matchesDomainRule", String.class, java.util.Set.class);
+        m.setAccessible(true);
+        assertTrue((Boolean) m.invoke(null, "evil.test", set));
+        assertTrue((Boolean) m.invoke(null, "cdn.evil.test", set));
+        assertFalse("suffix match must not be a substring match",
+                (Boolean) m.invoke(null, "notevil.test", set));
+        assertFalse((Boolean) m.invoke(null, "evil.test.attacker.example", set));
+        assertFalse((Boolean) m.invoke(null, "", set));
+        assertFalse((Boolean) m.invoke(null, null, set));
+    }
+
     // ---------- injected shield behaviour ----------
 
     public void testShieldActuallyChangesFingerprintFacts() throws Throwable {

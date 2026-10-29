@@ -341,6 +341,22 @@ public class MainActivity extends Activity {
 
         // Remote debugging over adb would expose every page's storage to a host.
         WebView.setWebContentsDebuggingEnabled(false);
+
+        // Sessions are meant to die with the process. Android skips onDestroy after
+        // a crash, a force-stop or a low-memory kill, so anything left on disk from
+        // the previous run is erased before the first page can read it.
+        boolean previousRunCrashed = getPreferences(MODE_PRIVATE).getBoolean("sessionOpen", false);
+        getPreferences(MODE_PRIVATE).edit().putBoolean("sessionOpen", true).apply();
+        try {
+            CookieManager.getInstance().removeAllCookies(null);
+            CookieManager.getInstance().flush();
+            WebStorage.getInstance().deleteAllData();
+        } catch (Exception ignored) { }
+        if (previousRunCrashed) {
+            // The previous session ended without a clean shutdown; its request log is
+            // not carried forward either.
+            synchronized (this) { capturedEntries.clear(); }
+        }
         noiseSeed = 100000 + new Random().nextInt(900000);
         loadBookmarks();
         loadContainers();
@@ -1592,14 +1608,37 @@ public class MainActivity extends Activity {
     }
 
     private static String normalizeDomainRule(String raw) {
-        String d = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
-        if (d.startsWith("http://")) d = d.substring(7);
-        if (d.startsWith("https://")) d = d.substring(8);
-        int slash = d.indexOf('/');
-        if (slash >= 0) d = d.substring(0, slash);
+        if (raw == null) return "";
+        String d = raw.trim().toLowerCase(Locale.ROOT);
+        if (d.isEmpty()) return "";
+        int schemeEnd = d.indexOf("://");
+        if (schemeEnd >= 0) d = d.substring(schemeEnd + 3);
+        // Reject anything still carrying a scheme-like prefix (javascript:, data:, etc.)
+        if (d.matches("^[a-z][a-z0-9+.-]*:.*") && !d.matches("^[0-9a-f:.]+:.*")) {
+            int colon = d.indexOf(':');
+            String maybeHost = colon > 0 ? d.substring(0, colon) : "";
+            if (!maybeHost.contains(".")) return "";
+        }
+        int at = d.lastIndexOf('@');
+        if (at >= 0) d = d.substring(at + 1);          // drop any userinfo
+        int cut = d.length();
+        for (char c : new char[]{'/', '?', '#'}) {
+            int i = d.indexOf(c);
+            if (i >= 0 && i < cut) cut = i;
+        }
+        d = d.substring(0, cut);
         int colon = d.indexOf(':');
-        if (colon >= 0) d = d.substring(0, colon);
-        if (d.isEmpty() || d.contains(" ") || !d.contains(".")) return "";
+        if (colon >= 0) d = d.substring(0, colon);     // drop any port
+        if (d.endsWith(".")) d = d.substring(0, d.length() - 1);
+        if (d.isEmpty() || d.length() > 253) return "";
+        // Only hostname characters survive: no spaces, credentials, paths or scripts.
+        if (!d.matches("^[a-z0-9.-]+$")) return "";
+        boolean looksLikeIp = d.matches("^[0-9.]+$");
+        if (!looksLikeIp && !d.contains(".")) return "";
+        for (String label : d.split("\\.")) {
+            if (label.isEmpty() || label.length() > 63) return "";
+            if (label.startsWith("-") || label.endsWith("-")) return "";
+        }
         return d;
     }
 
@@ -2466,8 +2505,6 @@ public class MainActivity extends Activity {
 
     private void burnAndRotateIdentity() {
         activePersonaIdx = (activePersonaIdx + 1) % personas.size();
-        // Remote debugging over adb would expose every page's storage to a host.
-        WebView.setWebContentsDebuggingEnabled(false);
         noiseSeed = 100000 + new Random().nextInt(900000);
         retryAttemptsByUrl.clear();
 
@@ -2699,6 +2736,7 @@ public class MainActivity extends Activity {
                 t.webView.destroy();
             }
         } catch (Exception ignored) {}
+        getPreferences(MODE_PRIVATE).edit().putBoolean("sessionOpen", false).apply();
         super.onDestroy();
     }
 }
