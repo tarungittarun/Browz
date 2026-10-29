@@ -25,16 +25,29 @@ Two independent gates run on every push (`Build Android Mobile APK` and
 | Exposed historical key tolerated **only** with `BROWZ_ALLOW_EXPOSED_KEY=1` | A trusted release cannot be cut with the leaked key by accident |
 | No test classes, no bundled keystore | Test hooks and secrets cannot ship |
 
-### 2. Device gate — runs the real code on Android 34
+### 2. Device gate — runs the real code on Android 34 (four suites)
+
+`AdversarialSecurityTest` — interception, bridge secrets, download policy,
+container and session wiping, capture flags, manifest at runtime, shield.
+`InputSafetyTest` — URL entry fuzzing (300 random inputs plus a hostile corpus),
+error-page escaping, request-log bounds, clear-data completeness.
+`UxContractTest` — 48 dp touch targets, WCAG AA contrast, rotation, start budget.
+`BrowserUiTest` — menu, tabs, bookmarks and the newer screens.
+The artifact gate in `test/verify-apk.sh` re-checks the packaged binary independently of all four.
 
 `AdversarialSecurityTest` executes actual app objects (it does not grep source):
 
-- **Interception**: a real `WebViewClient` blocks `google-analytics.com`, `127.0.0.1`,
-  `169.254.169.254` and NUL-byte URLs, while forwarding an ordinary page request.
+- **Interception**: a real `WebViewClient` blocks `google-analytics.com`, loopback
+  (`127.0.0.1`, `[::1]`, `0x7f000001`, `2130706433`, `localhost.localdomain`),
+  `169.254.169.254`, `100.100.100.200` and NUL-byte URLs, while forwarding an
+  ordinary page request.
 - **User rules**: a blocked domain stops a subresource; an allow rule exempts a
   tracker host.
 - **Client certificates**: the request is cancelled, so a hostile server cannot
   pop the OS certificate picker.
+- **Bridge authorisation**: a forged `BrowzNative` call cannot rotate identity or
+  read audit data, while the genuine per-process secret still works.
+- **Download policy**: the default blocks a download and records why.
 - **Container switch**: a cookie planted for `example.com` is gone afterwards, and
   exactly one fresh page remains.
 - **Screen capture**: `FLAG_SECURE` is set on the real window.
@@ -56,12 +69,17 @@ container/network/hardware screens open without crashing.
 | Malicious app starts Browz with a crafted link | Only `http`/`https` accepted, cleaned and HTTPS-upgraded; other schemes ignored | Static suite | A browser must accept web links; a malicious link can still open a real page |
 | Malicious app reads the screen | `FLAG_SECURE`; content capture and autofill disabled | Device probe of window flags | Accessibility services, root, and screenshots after the toggle is off bypass this |
 | Attacker with adb | Not debuggable, backup disabled, WebView debugging disabled | Artifact gate + static suite | An unlocked bootloader, root, or a vendor backdoor defeats it |
-| Compromised update | None yet: the historical key is exposed | Artifact gate warns | **This is why the APK is a preview.** See `docs/SIGNING.md` |
+| Compromised update | None yet: the historical key is exposed | Artifact gate warns; `tools/verify-download.sh` prints the fingerprint; `release-android.yml` refuses to publish without an owner key | **This is why the APK is a preview.** See `docs/SIGNING.md` |
+| Data left behind by a crash | Cookies and site storage are wiped at launch before the first page | Device test plants a cookie, simulates an unclean exit, relaunches and asserts it is gone | Filesystem forensics, backups taken before the wipe, or a compromised OS |
+| Numeric/IPv6 spellings of loopback | Address parsing covers dotted, decimal, hex, IPv6 and `*.localhost` | Device matrix of 16 blocked and 8 allowed hosts | DNS rebinding to a public IP that later resolves internally |
+| Memory exhaustion from many tabs | 20-tab cap; caches trimmed under memory pressure | Device test creates 30 tabs and asserts the count stays bounded | Large single pages, heavy media |
 | Server asks for stored credentials / client cert | `HttpAuthHandler.cancel()`, `ClientCertRequest.cancel()` | Static suite (auth handler), device test (client cert) | Untested on real enterprise networks |
 | Tracker or beacon requests | Built-in list + user rules + third-party cookies off | Device tests | First-party tracking, CNAME cloaking and server-side tagging survive |
 
 ## Known-unverified areas
 
+0. **The tests are the project's own.** Two CI gates and five device suites raise the
+   bar; they do not replace an external reviewer. Every claim below is limited by that.
 1. **No independent penetration test.** Every result here is self-reported by this
    repository's CI. An external reviewer with a different threat model is required.
 2. **No real-device matrix.** Only an API 34 x86_64 emulator has run the suite. OEM
