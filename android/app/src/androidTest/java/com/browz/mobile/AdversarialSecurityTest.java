@@ -113,10 +113,9 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         assertEquals("allowBackup must be false",
                 0, info.flags & ApplicationInfo.FLAG_ALLOW_BACKUP);
 
-        // Instrumentation runs the debug variant, so debuggable is expected only there.
-        int expectedDebuggable = BuildConfig.DEBUG ? ApplicationInfo.FLAG_DEBUGGABLE : 0;
-        assertEquals("debuggable must match the variant under test",
-                expectedDebuggable, info.flags & ApplicationInfo.FLAG_DEBUGGABLE);
+        // Instrumentation runs the debuggable debug variant, so the release-only
+        // "not debuggable" assertion lives in test/verify-apk.sh, which inspects the
+        // signed release artifact with aapt.
 
         PackageInfo full = pm.getPackageInfo(ctx.getPackageName(),
                 PackageManager.GET_PERMISSIONS | PackageManager.GET_ACTIVITIES
