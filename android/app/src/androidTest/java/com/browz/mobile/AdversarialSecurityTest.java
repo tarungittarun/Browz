@@ -271,32 +271,26 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
 
     public void testShieldActuallyChangesFingerprintFacts() throws Throwable {
         final MainActivity activity = getActivity();
-        final WebView[] holder = new WebView[1];
-        onUi(() -> holder[0] = new WebView(activity));
-        final WebView probe = holder[0];
-        try {
-            onUi(() -> probe.loadDataWithBaseURL("https://probe.test/",
-                    "<!doctype html><html><body>probe</body></html>", "text/html", "UTF-8", null));
-            Thread.sleep(1500);
-
-            final String shieldJs = (String) call(activity, "buildMobileStealthJs", true);
-            onUi(() -> probe.evaluateJavascript(shieldJs, null));
-            Thread.sleep(500);
-
-            String result = evalString(probe,
-                    "JSON.stringify({webdriver:navigator.webdriver,"
-                    + "platform:navigator.platform,"
-                    + "width:screen.width,"
-                    + "dnt:navigator.doNotTrack,"
-                    + "rtc:(function(){try{new RTCPeerConnection();return 'allowed';}catch(e){return 'blocked';}})()})");
-            assertNotNull("no probe result", result);
-            assertTrue("navigator.webdriver must be false: " + result, result.contains("\"webdriver\":false"));
-            assertTrue("screen width must be spoofed: " + result, result.contains("\"width\":412"));
-            assertTrue("doNotTrack must be signalled: " + result, result.contains("\"dnt\":\"1\""));
-            assertTrue("WebRTC must be blocked: " + result, result.contains("\"rtc\":\"blocked\""));
-        } finally {
-            onUi(() -> probe.destroy());
-        }
+        // The shield is injected on page start, so probe the real, attached page
+        // rather than a detached WebView that may never load.
+        Thread.sleep(2000);
+        final WebView view = activeWebView(activity);
+        String result = evalString(view,
+                "JSON.stringify({webdriver:navigator.webdriver,"
+                + "platform:navigator.platform,"
+                + "width:screen.width,"
+                + "dnt:navigator.doNotTrack,"
+                + "gpc:navigator.globalPrivacyControl,"
+                + "rtc:(function(){try{new RTCPeerConnection();return 'allowed';}catch(e){return 'blocked';}})()})");
+        assertNotNull("shield probe returned null; the page may not have executed the injected script", result);
+        java.util.Set<String> personaPlatforms = new java.util.HashSet<>(java.util.Arrays.asList(
+                "Linux armv81", "iPhone", "Win32", "Linux aarch64"));
+        String platform = result.replaceAll(".*\"platform\":\"([^\"]*)\".*", "$1");
+        assertTrue("platform must be spoofed, got: " + result, personaPlatforms.contains(platform));
+        assertTrue("navigator.webdriver must be false: " + result, result.contains("\"webdriver\":false"));
+        assertTrue("screen width must be spoofed: " + result, result.contains("\"width\":412"));
+        assertTrue("doNotTrack must be signalled: " + result, result.contains("\"dnt\":\"1\""));
+        assertTrue("WebRTC must be blocked: " + result, result.contains("\"rtc\":\"blocked\""));
     }
 
     private String evalString(final WebView view, final String js) throws Throwable {
