@@ -803,7 +803,11 @@ public class MainActivity extends Activity {
         s.setAllowUniversalAccessFromFileURLs(false);
         s.setGeolocationEnabled(false);
         s.setSaveFormData(false);
-        s.setMediaPlaybackRequiresUserGesture(false);
+        // Media must not start playing with sound until the user interacts.
+        s.setMediaPlaybackRequiresUserGesture(true);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            s.setSafeBrowsingEnabled(true);
+        }
         s.setSupportMultipleWindows(false);
         s.setJavaScriptCanOpenWindowsAutomatically(false);
         // Strict: an HTTPS page may never load HTTP subresources, so an on-path attacker
@@ -1064,6 +1068,21 @@ public class MainActivity extends Activity {
         });
 
         wv.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView view, android.webkit.ValueCallback<Uri[]> callback,
+                                             FileChooserParams params) {
+                // A page must not be able to open the system file picker on its own.
+                if (blockFileSystemAccess) {
+                    if (callback != null) callback.onReceiveValue(null);
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        "File picker blocked. Allow it in Menu > Hardware & permissions.",
+                        Toast.LENGTH_LONG).show());
+                    recordRequest("FILE", "file-chooser", "", true, "File picker blocked by policy");
+                    return true;
+                }
+                return false;
+            }
+
             @Override
             public void onProgressChanged(WebView view, int newProgress) {
                 if (activeTab != null && activeTab.webView == view) {

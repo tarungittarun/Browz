@@ -338,6 +338,18 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
                 personaBefore, ((Integer) field(activity, "activePersonaIdx")).intValue());
     }
 
+    public void testFilePickerIsBlockedByDefault() throws Throwable {
+        final MainActivity activity = getActivity();
+        final boolean[] handled = {false};
+        onUi(() -> {
+            WebView wv = activeWebView(activity);
+            android.webkit.WebChromeClient chrome = wv.getWebChromeClient();
+            assertNotNull("no WebChromeClient installed", chrome);
+            handled[0] = chrome.onShowFileChooser(wv, null, null);
+        });
+        assertTrue("a page must not be able to open the system file picker", handled[0]);
+    }
+
     public void testTabCountIsBounded() throws Throwable {
         final MainActivity activity = getActivity();
         for (int i = 0; i < 30; i++) {
