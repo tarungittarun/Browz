@@ -1,6 +1,12 @@
 name: User guide screenshots
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - arena/906ee2db-browz
+    paths:
+      - '.github/workflows/guide-screenshots.yml'
+      - 'android/app/src/androidTest/java/com/browz/mobile/GuideScreenshotsTest.java'
 permissions:
   contents: read
 jobs:
