@@ -40,6 +40,9 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebStorage;
 import android.webkit.WebView;
+import android.webkit.ClientCertRequest;
+import android.webkit.HttpAuthHandler;
+import android.webkit.SslErrorHandler;
 import android.webkit.WebViewClient;
 import android.widget.Button;
 import android.widget.CheckBox;
@@ -276,7 +279,7 @@ public class MainActivity extends Activity {
     private final List<CapturedEntry> capturedEntries = new ArrayList<>();
     private final List<BookmarkItem> bookmarks = new ArrayList<>(Arrays.asList(
         new BookmarkItem("Home", "browz://home"),
-        new BookmarkItem("24-Point Security", "browz://security"),
+        new BookmarkItem("Live privacy checks", "browz://security"),
         new BookmarkItem("API Testbench", "browz://testbench"),
         new BookmarkItem("DuckDuckGo", "https://duckduckgo.com"),
         new BookmarkItem("GitHub", "https://github.com"),
@@ -336,6 +339,8 @@ public class MainActivity extends Activity {
         getWindow().setStatusBarColor(Color.parseColor("#121215"));
         getWindow().setNavigationBarColor(Color.parseColor("#18181c"));
 
+        // Remote debugging over adb would expose every page's storage to a host.
+        WebView.setWebContentsDebuggingEnabled(false);
         noiseSeed = 100000 + new Random().nextInt(900000);
         loadBookmarks();
         loadContainers();
@@ -552,8 +557,16 @@ public class MainActivity extends Activity {
         // Open initial tab (or external intent URL if launched from link)
         String initialUrl = "browz://home";
         Intent intent = getIntent();
-        if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getDataString() != null) {
-            initialUrl = intent.getDataString();
+        if (intent != null && Intent.ACTION_VIEW.equals(intent.getAction()) && intent.getData() != null) {
+            Uri supplied = intent.getData();
+            String scheme = supplied.getScheme() == null ? "" : supplied.getScheme().toLowerCase(Locale.ROOT);
+            // Another app can start Browz with any URI; only plain web links are accepted,
+            // and they are stripped and HTTPS-upgraded exactly like typed addresses.
+            if ("http".equals(scheme) || "https".equals(scheme)) {
+                initialUrl = cleanAndUpgradeUrl(supplied);
+            } else {
+                Toast.makeText(this, "Browz ignored an unsupported link from another app", Toast.LENGTH_LONG).show();
+            }
         }
         createAndSwitchTab(initialUrl, false);
     }
@@ -775,7 +788,9 @@ public class MainActivity extends Activity {
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setSupportMultipleWindows(false);
         s.setJavaScriptCanOpenWindowsAutomatically(false);
-        s.setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
+        // Strict: an HTTPS page may never load HTTP subresources, so an on-path attacker
+        // cannot downgrade or inject script into a secure page.
+        s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         s.setUseWideViewPort(true);
         s.setLoadWithOverviewMode(true);
         s.setBuiltInZoomControls(true);
@@ -909,6 +924,32 @@ public class MainActivity extends Activity {
                 recordRequest(method, reqUrl, host, false, "Request forwarded to network");
                 maybeProbeStatus(request, reqUrl);
                 return super.shouldInterceptRequest(view, request);
+            }
+
+            @Override
+            public void onReceivedSslError(WebView view, SslErrorHandler handler, android.net.http.SslError error) {
+                // Never let the user click through an invalid certificate.
+                handler.cancel();
+                final String badUrl = error != null && error.getUrl() != null ? error.getUrl() : "";
+                runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                    "Blocked a connection with an invalid TLS certificate", Toast.LENGTH_LONG).show());
+                recordRequest("GET", badUrl, "", true, "TLS certificate rejected");
+            }
+
+            @Override
+            public void onReceivedClientCertRequest(WebView view, ClientCertRequest request) {
+                // A malicious server must not be able to trigger the OS certificate picker.
+                request.cancel();
+            }
+
+            @Override
+            public void onReceivedHttpAuthRequest(WebView view, HttpAuthHandler handler,
+                                                  String host, String realm) {
+                // Model credentials are never replayed: deny instead of prompting.
+                handler.cancel();
+                Toast.makeText(MainActivity.this,
+                    "Blocked a site request for stored HTTP credentials (" + host + ")",
+                    Toast.LENGTH_LONG).show();
             }
 
             @Override
@@ -1946,7 +1987,7 @@ public class MainActivity extends Activity {
             urlInput.setText("");
             loadHomeIntoWebView(activeTab.webView);
         } else if ("browz://security".equals(target)) {
-            activeTab.title = "18-Point Security Audit";
+            activeTab.title = "Live privacy checks";
             urlInput.setText("browz://security");
             loadSecurityAuditIntoWebView(activeTab.webView);
         } else if ("browz://testbench".equals(target)) {
@@ -2008,7 +2049,7 @@ public class MainActivity extends Activity {
         Persona p = personas.get(activePersonaIdx);
         String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'>" +
             "<meta name='viewport' content='width=device-width,initial-scale=1.0'>" +
-            "<title>18-Point Mobile Security Audit</title>" +
+            "<title>Live privacy checks (not a certification)</title>" +
             "<style>" +
             "*{box-sizing:border-box;margin:0;padding:0}" +
             "body{background:#121215;color:#f4f4f5;font-family:-apple-system,Roboto,sans-serif;padding:16px}" +
@@ -2024,7 +2065,8 @@ public class MainActivity extends Activity {
             ".pass{color:#22c55e;font-size:11px;font-weight:700;background:rgba(34,197,94,0.15);padding:2px 6px;border-radius:4px}" +
             ".val{font-family:monospace;font-size:11px;color:#9ca3af;word-break:break-all}" +
             "</style></head><body>" +
-            "<div class='head'><h2>🛡️ Live 18-Point Mobile Security Audit</h2><span class='badge' id='scoreBadge'>Running...</span></div>" +
+            "<div class='head'><h2>Live checks on this device</h2><span class='badge' id='scoreBadge'>Running...</span></div>" +
+            "<div style='background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.4);border-radius:8px;padding:10px;font-size:12px;color:#fbbf24;margin-bottom:12px'>These checks measure a few properties of this WebView. Passing them is not a security audit or a guarantee: a hostile page, a compromised device or a hostile network can still defeat parts of it.</div>" +
             "<div class='sub'>These checks are illustrative, not an independent security audit. Some are not verified; passing does not guarantee anonymity or protection.</div>" +
             "<div class='sub'>Persona: <strong>" + p.label + "</strong> · Seed <strong>#" + noiseSeed + "</strong></div>" +
             "<div class='btns'>" +
@@ -2424,6 +2466,8 @@ public class MainActivity extends Activity {
 
     private void burnAndRotateIdentity() {
         activePersonaIdx = (activePersonaIdx + 1) % personas.size();
+        // Remote debugging over adb would expose every page's storage to a host.
+        WebView.setWebContentsDebuggingEnabled(false);
         noiseSeed = 100000 + new Random().nextInt(900000);
         retryAttemptsByUrl.clear();
 

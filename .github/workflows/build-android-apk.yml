@@ -47,6 +47,9 @@ jobs:
           cp android/app/build/outputs/apk/release/app-release.apk Browz-Mobile-1.0.3-preview.apk
           ls -lh Browz-Mobile-1.0.3-preview.apk
 
+      - name: Strict artifact verification (permissions, manifest, signature, contents)
+        run: ./test/verify-apk.sh Browz-Mobile-1.0.3-preview.apk
+
       - name: Verify preview APK signature and permissions
         run: |
           BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)

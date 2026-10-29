@@ -32,6 +32,26 @@ assert.ok(java.includes('setDownloadListener('));
 assert.ok(java.includes('appDeclaresPermission("android.permission.CAMERA")'));
 assert.ok(java.includes('FLAG_SECURE'));
 assert.ok(java.includes('buildHardwareReport()'));
+
+// Strict transport and credential handling.
+assert.ok(java.includes('MIXED_CONTENT_NEVER_ALLOW'), 'HTTPS pages must not load HTTP subresources');
+assert.ok(!java.includes('MIXED_CONTENT_COMPATIBILITY_MODE'));
+assert.ok(java.includes('onReceivedSslError(') && java.includes('handler.cancel()'));
+assert.ok(java.includes('onReceivedClientCertRequest(') && java.includes('request.cancel()'));
+assert.ok(java.includes('onReceivedHttpAuthRequest('));
+assert.ok(java.includes('WebView.setWebContentsDebuggingEnabled(false)'));
+const manifestStrict = fs.readFileSync('android/app/src/main/AndroidManifest.xml', 'utf8');
+assert.ok(manifestStrict.includes('android:allowBackup="false"'));
+assert.ok(manifestStrict.includes('android:usesCleartextTraffic="false"'));
+assert.ok(manifestStrict.includes('android:networkSecurityConfig="@xml/network_security_config"'));
+const nsc = fs.readFileSync('android/app/src/main/res/xml/network_security_config.xml', 'utf8');
+assert.ok(nsc.includes('cleartextTrafficPermitted="false"'));
+assert.ok(!nsc.includes('certificates src="user"'), 'user-installed CAs must not be trusted');
+// External intents must not be able to supply a non-web scheme.
+assert.ok(java.includes('"http".equals(scheme) || "https".equals(scheme)'));
+// Honest naming for the in-app checks.
+assert.ok(java.includes('not a security audit or a guarantee'));
+assert.ok(!java.includes('18-Point Mobile Security Audit'));
 assert.ok(java.includes('saveBookmarks()') && java.includes('loadBookmarks()'));
 assert.ok(java.includes('status not measured'));
 assert.ok(!java.includes('"200 OK "'));
