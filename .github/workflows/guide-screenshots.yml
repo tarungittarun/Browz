@@ -1,0 +1,66 @@
+name: User guide screenshots
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          script: |
+            gradle connectedDebugAndroidTest -p android --no-daemon -Pandroid.testInstrumentationRunnerArguments.class=com.browz.mobile.GuideScreenshotsTest
+            mkdir -p screenshots
+            adb pull /sdcard/Android/data/com.browz.mobile/files/guide-screenshots/. screenshots/
+            ls -l screenshots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: guide-mobile-screenshots
+          path: screenshots/*.png
+          if-no-files-found: error
+  desktop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install runtime and screenshot tools
+        run: |
+          npm install --no-save electron@33.2.0
+          sudo apt-get update -qq
+          sudo apt-get install -y xvfb xdotool imagemagick
+      - name: Capture actual Electron desktop interface on Linux
+        run: |
+          mkdir -p screenshots
+          xvfb-run -a -s '-screen 0 1600x1000x24' bash -c '
+            ./node_modules/.bin/electron . --no-sandbox > /tmp/browz-guide.log 2>&1 &
+            pid=$!
+            sleep 15
+            cat /tmp/browz-guide.log
+            import -window root screenshots/desktop-home.png
+            kill "$pid" || true
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: guide-desktop-screenshots
+          path: screenshots/*.png
+          if-no-files-found: error
