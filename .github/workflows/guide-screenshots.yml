@@ -8,7 +8,7 @@ on:
       - '.github/workflows/guide-screenshots.yml'
       - 'android/app/src/androidTest/java/com/browz/mobile/GuideScreenshotsTest.java'
 permissions:
-  contents: read
+  contents: write
 jobs:
   android:
     runs-on: ubuntu-latest
@@ -36,6 +36,19 @@ jobs:
             mkdir -p screenshots
             adb pull /sdcard/Android/data/com.browz.mobile/files/guide-screenshots/. screenshots/
             ls -l screenshots
+      - name: Expose test failure details
+        if: failure()
+        run: |
+          find android/app/build/outputs/androidTest-results -name '*.xml' -exec cat {} \; 2>/dev/null | tail -c 12000 | tr '\n' ' ' | sed 's/^/::error::/' || true
+      - name: Store screenshot blobs for guide preparation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for f in screenshots/*.png; do
+            python3 -c 'import base64,json,sys; print(json.dumps({"content":base64.b64encode(open(sys.argv[1],"rb").read()).decode(),"encoding":"base64"}))' "$f" > /tmp/blob.json
+            sha=$(gh api -X POST repos/${{ github.repository }}/git/blobs --input /tmp/blob.json --jq .sha)
+            echo "::notice title=Screenshot blob::$(basename "$f") $sha"
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: guide-mobile-screenshots
@@ -65,6 +78,13 @@ jobs:
             import -window root screenshots/desktop-home.png
             kill "$pid" || true
           '
+      - name: Store screenshot blob for guide preparation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 -c 'import base64,json; print(json.dumps({"content":base64.b64encode(open("screenshots/desktop-home.png","rb").read()).decode(),"encoding":"base64"}))' > /tmp/blob.json
+          sha=$(gh api -X POST repos/${{ github.repository }}/git/blobs --input /tmp/blob.json --jq .sha)
+          echo "::notice title=Screenshot blob::desktop-home.png $sha"
       - uses: actions/upload-artifact@v4
         with:
           name: guide-desktop-screenshots
