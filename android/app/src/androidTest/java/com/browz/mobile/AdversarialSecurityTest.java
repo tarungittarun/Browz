@@ -267,6 +267,69 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         return ctor.newInstance(id, name);
     }
 
+    // ---------- native bridge authorisation ----------
+
+    public void testBridgeRejectsCallsWithWrongSecret() throws Throwable {
+        final MainActivity activity = getActivity();
+        onUi(() -> call(activity, "navigateActiveTab", "browz://home"));
+        Thread.sleep(1500);
+
+        assertEquals("internal page must expose the bridge", "object",
+                evalString(activeWebView(activity), "typeof window.BrowzNative"));
+
+        Object bridge = null;
+        for (Class<?> inner : MainActivity.class.getDeclaredClasses()) {
+            if (inner.getSimpleName().equals("BridgeInterface")) {
+                Constructor<?> ctor = inner.getDeclaredConstructor(MainActivity.class);
+                ctor.setAccessible(true);
+                bridge = ctor.newInstance(activity);
+            }
+        }
+        assertNotNull("BridgeInterface not found", bridge);
+
+        String stats = (String) bridge.getClass().getMethod("getNativeAuditStats", String.class)
+                .invoke(bridge, "not-the-secret");
+        assertEquals("a wrong secret must not leak audit data", "{}", stats);
+
+        int personaBefore = (Integer) field(activity, "activePersonaIdx");
+        bridge.getClass().getMethod("rotateIdentity", String.class).invoke(bridge, "forged-secret");
+        getInstrumentation().waitForIdleSync();
+        Thread.sleep(300);
+        assertEquals("forged bridge call must not change the persona",
+                personaBefore, ((Integer) field(activity, "activePersonaIdx")).intValue());
+
+        // The genuine secret must still work, proving the test exercises the real path.
+        bridge.getClass().getMethod("rotateIdentity", String.class)
+                .invoke(bridge, (String) field(activity, "bridgeSecret"));
+        getInstrumentation().waitForIdleSync();
+        Thread.sleep(600);
+        assertNotSame("the genuine secret must be able to rotate identity",
+                personaBefore, ((Integer) field(activity, "activePersonaIdx")).intValue());
+    }
+
+    // ---------- download policy ----------
+
+    public void testDownloadPolicyBlocksByDefault() throws Throwable {
+        final MainActivity activity = getActivity();
+        android.webkit.DownloadListener listener =
+                (android.webkit.DownloadListener) field(activity, "downloadListener");
+        assertNotNull("download listener was not installed", listener);
+
+        java.util.List<?> log = (java.util.List<?>) field(activity, "capturedEntries");
+        int before;
+        synchronized (activity) { before = log.size(); }
+        onUi(() -> listener.onDownloadStart("https://example.org/file.apk", "ua", null, "application/vnd.android.package-archive", 10));
+        int after;
+        synchronized (activity) { after = log.size(); }
+
+        assertEquals("the default policy must block downloads", before + 1, after);
+        Object newest = null;
+        synchronized (activity) { newest = log.get(0); }
+        String reason = (String) field(newest, "reason");
+        assertTrue("blocked download must be logged with its reason, got: " + reason,
+                reason != null && reason.contains("blocked by policy"));
+    }
+
     // ---------- session data must not survive a relaunch ----------
 
     public void testSessionCookieDoesNotSurviveRelaunch() throws Throwable {

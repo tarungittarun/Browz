@@ -269,6 +269,8 @@ public class MainActivity extends Activity {
     private int blockedTrackersCount = 0;
     private int seqCounter = 1;
     private boolean blockDownloads = true;
+    // Retained so the policy can be exercised by device tests.
+    android.webkit.DownloadListener downloadListener = null;
     private boolean probeStatuses = true;
     private final Set<String> blockedDomainRules = new HashSet<>();
     private final Set<String> allowedDomainRules = new HashSet<>();
@@ -816,7 +818,7 @@ public class MainActivity extends Activity {
             s.setCacheMode(WebSettings.LOAD_NO_CACHE);
         }
 
-        wv.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
+        downloadListener = (url, userAgent, contentDisposition, mimeType, contentLength) -> {
             String dlHost = Uri.parse(url).getHost();
             if (dlHost == null) dlHost = "";
             if (blockDownloads) {
@@ -825,7 +827,8 @@ public class MainActivity extends Activity {
                 return;
             }
             startSystemDownload(url, userAgent, contentDisposition, mimeType);
-        });
+        };
+        wv.setDownloadListener(downloadListener);
 
         // Long-press link menu (Open in New Tab, Open in Ghost Tab, Copy Clean URL)
         wv.setOnLongClickListener(v -> {
