@@ -64,6 +64,9 @@ import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
+
 public class MainActivity extends Activity {
 
     private static class Persona {
@@ -310,6 +313,7 @@ public class MainActivity extends Activity {
         getWindow().setNavigationBarColor(Color.parseColor("#18181c"));
 
         noiseSeed = 100000 + new Random().nextInt(900000);
+        loadBookmarks();
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -544,6 +548,46 @@ public class MainActivity extends Activity {
         return tv;
     }
 
+    // Bookmarks are private app data, but can include sensitive URLs. They are not encrypted.
+    private void loadBookmarks() {
+        String saved = getPreferences(MODE_PRIVATE).getString("bookmarks", null);
+        if (saved == null) return;
+        try {
+            JSONArray data = new JSONArray(saved);
+            List<BookmarkItem> restored = new ArrayList<>();
+            for (int i = 0; i < data.length() && i < 500; i++) {
+                JSONObject item = data.optJSONObject(i);
+                if (item == null) continue;
+                String title = item.optString("title", "");
+                String url = item.optString("url", "");
+                if (title.length() > 200 || url.length() > 8192 || title.isEmpty()) continue;
+                Uri parsed = Uri.parse(url);
+                String scheme = parsed.getScheme();
+                if (!("https".equals(scheme) || "http".equals(scheme) || "browz".equals(scheme))) continue;
+                restored.add(new BookmarkItem(title, url));
+            }
+            bookmarks.clear();
+            bookmarks.addAll(restored);
+        } catch (Exception ignored) {
+            // A malformed preference must not prevent the browser from opening.
+        }
+    }
+
+    private void saveBookmarks() {
+        JSONArray data = new JSONArray();
+        try {
+            for (BookmarkItem bookmark : bookmarks) {
+                JSONObject item = new JSONObject();
+                item.put("title", bookmark.title);
+                item.put("url", bookmark.url);
+                data.put(item);
+            }
+            getPreferences(MODE_PRIVATE).edit().putString("bookmarks", data.toString()).apply();
+        } catch (Exception e) {
+            Toast.makeText(this, "Could not save bookmarks", Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void renderBookmarksBar() {
         if (bookmarksContainer == null) return;
         bookmarksContainer.removeAllViews();
@@ -575,6 +619,7 @@ public class MainActivity extends Activity {
                 break;
             }
         }
+        starBtn.setContentDescription(found ? "Remove bookmark" : "Bookmark this page");
         starBtn.setText(found ? "★" : "☆");
         starBtn.setTextColor(found ? Color.parseColor("#eab308") : Color.parseColor("#d4d4d8"));
     }
@@ -584,15 +629,21 @@ public class MainActivity extends Activity {
         for (int i = 0; i < bookmarks.size(); i++) {
             if (bookmarks.get(i).url.equals(activeTab.url)) {
                 bookmarks.remove(i);
+                saveBookmarks();
                 renderBookmarksBar();
                 syncBookmarkStar();
                 Toast.makeText(this, "Removed bookmark", Toast.LENGTH_SHORT).show();
                 return;
             }
         }
+        if (bookmarks.size() >= 500 || activeTab.url.length() > 8192) {
+            Toast.makeText(this, "Bookmark limit reached or address is too long", Toast.LENGTH_LONG).show();
+            return;
+        }
         String title = !TextUtils.isEmpty(activeTab.title) ? activeTab.title : activeTab.url;
         if (title.length() > 20) title = title.substring(0, 20);
         bookmarks.add(new BookmarkItem(title, activeTab.url));
+        saveBookmarks();
         renderBookmarksBar();
         syncBookmarkStar();
         Toast.makeText(this, "Bookmarked: " + title, Toast.LENGTH_SHORT).show();
@@ -1636,7 +1687,7 @@ public class MainActivity extends Activity {
         }
         String[] labels = new String[bookmarks.size()];
         for (int i = 0; i < bookmarks.size(); i++) labels[i] = bookmarks.get(i).title;
-        new AlertDialog.Builder(this).setTitle("Bookmarks (current session)")
+        new AlertDialog.Builder(this).setTitle("Bookmarks")
             .setItems(labels, (dialog, which) -> navigateActiveTab(bookmarks.get(which).url))
             .setNegativeButton("Close", null).show();
     }
@@ -1654,7 +1705,7 @@ public class MainActivity extends Activity {
 
     private void confirmClearBrowsingData() {
         new AlertDialog.Builder(this).setTitle("Clear browsing data?")
-            .setMessage("Clears cookies, site storage, cache, history and the request log for all tabs. You may be signed out. Bookmarks are kept for this session.")
+            .setMessage("Clears cookies, site storage, cache, history and the request log for all tabs. You may be signed out. Bookmarks are kept.")
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Clear", (dialog, which) -> {
                 CookieManager cm = CookieManager.getInstance();
@@ -1673,7 +1724,7 @@ public class MainActivity extends Activity {
 
     private void showPrivacyInfo() {
         new AlertDialog.Builder(this).setTitle("Privacy and limitations")
-            .setMessage("Browz is not Tor or a VPN: websites and network providers may see your IP address. Android WebView shares cookies and site storage across tabs; low-cache tabs are not private or isolated. Request logging is incomplete and cannot show response status or bodies. Network profiles simulate web-facing values, not device Wi-Fi controls. Some page-level shields run after page scripts and are not guaranteed. Android, keyboards and other privileged software may access data.")
+            .setMessage("Browz is not Tor or a VPN: websites and network providers may see your IP address. Android WebView shares cookies and site storage across tabs; low-cache tabs are not private or isolated. Request logging is incomplete and cannot show response status or bodies. Network profiles simulate web-facing values, not device Wi-Fi controls. Some page-level shields run after page scripts and are not guaranteed. Bookmarks are saved on this device and may contain sensitive addresses. Android, keyboards and other privileged software may access data.")
             .setPositiveButton("Understood", null).show();
     }
 

@@ -7,6 +7,7 @@ for (const feature of ['showBrowserMenu()', 'showBookmarksDialog()', 'shareCurre
   'confirmClearBrowsingData()', 'showPrivacyInfo()', 'showTrafficCaptureDialog()']) {
   assert.ok(java.includes(feature), `Missing mobile feature: ${feature}`);
 }
+assert.ok(java.includes('saveBookmarks()') && java.includes('loadBookmarks()'));
 assert.ok(java.includes('response unknown'));
 assert.ok(!java.includes('"200 OK "'));
 assert.ok(!java.includes('Copy HAR 1.2 JSON'));

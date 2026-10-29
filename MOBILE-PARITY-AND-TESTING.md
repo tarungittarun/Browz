@@ -1,11 +1,11 @@
 # Mobile parity and testing notes
 
-Browz Mobile uses Android System WebView. It is not the Electron desktop browser and cannot reproduce every desktop feature. The mobile menu provides tabs, session bookmarks, find/text zoom, video fit, privacy settings, an observed-request log, share and a confirmed clear-data action. The address bar and navigation controls are kept prominent, with 48 dp targets for the main controls. Home/normal browsing and security controls are separate from the page.
+Browz Mobile uses Android System WebView. It is not the Electron desktop browser and cannot reproduce every desktop feature. The mobile menu provides tabs, bookmarks saved on the device, find/text zoom, video fit, privacy settings, an observed-request log, share and a confirmed clear-data action. The address bar and navigation controls are kept prominent, with 48 dp targets for the main controls. Home/normal browsing and security controls are separate from the page.
 
 ## Important limitations
 
 - **Not anonymous:** Browz is not Tor or a VPN. Your IP address can be visible to sites and your network operator, and fingerprinting cannot be prevented completely. Choosing a Firefox-style profile does not route through Tor.
-- **No isolated private tabs:** WebView cookies and storage are shared by tabs. Low-cache tabs are not RAM-only, private, or independent accounts. Bookmarks currently last only during the activity session.
+- **No isolated private tabs:** WebView cookies and storage are shared by tabs. Low-cache tabs are not RAM-only, private, or independent accounts. Bookmarks persist in app-private storage and are not encrypted; they can contain sensitive URLs. Clear browsing data does not delete them; remove individual bookmarks using the star.
 - **Traffic is partial:** WebView does not expose every request to `shouldInterceptRequest` and does not supply response status, headers, bodies, or timing there. The mobile view is a request observation log, not HAR or the desktop's full capture/replay/composer. URLs and clipboard contents may contain secrets.
 - **Shields are best-effort:** page-level scripts can run before the injected script, can bypass or undo it, and service workers and WebSockets may bypass request interception. Network profile values are simulations, not physical radio controls or a firewall. Do not rely on the attempted offline mode to block network access. Android, privileged apps, keyboards, and the OS may see data. Safe Browsing is enabled, subject to the device's WebView implementation and its privacy policy.
 - Browser links to external app schemes and file uploads remain restricted; this can prevent certain sites from working. Camera, microphone, and location are denied.
