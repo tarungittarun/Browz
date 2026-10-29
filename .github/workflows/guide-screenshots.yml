@@ -39,7 +39,12 @@ jobs:
       - name: Expose test failure details
         if: failure()
         run: |
-          find android/app/build/outputs/androidTest-results -name '*.xml' -exec cat {} \; 2>/dev/null | tail -c 12000 | tr '\n' ' ' | sed 's/^/::error::/' || true
+          python3 - <<'PYDETAIL'
+          import glob,base64
+          for path in glob.glob('android/app/build/outputs/androidTest-results/**/*.xml', recursive=True):
+              data = open(path, 'rb').read()
+              print('::notice title=Result XML::' + base64.b64encode(data).decode())
+          PYDETAIL
       - name: Store screenshot blobs for guide preparation
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
