@@ -1,6 +1,5 @@
 package com.browz.mobile;
 
-import android.app.Application;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
@@ -14,7 +13,6 @@ import android.test.ActivityInstrumentationTestCase2;
 import android.view.WindowManager;
 import android.webkit.ClientCertRequest;
 import android.webkit.CookieManager;
-import android.webkit.HttpAuthHandler;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
@@ -210,20 +208,13 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         }
     }
 
-    public void testHttpAuthAndClientCertificatesAreDenied() throws Throwable {
+    public void testClientCertificateRequestsAreDenied() throws Throwable {
         MainActivity activity = getActivity();
         WebView wv = activeWebView(activity);
         WebViewClient client = wv.getWebViewClient();
 
-        final boolean[] authCancelled = {false};
-        HttpAuthHandler auth = new HttpAuthHandler() {
-            @Override public boolean useHttpAuthUsernamePassword() { return false; }
-            @Override public void cancel() { authCancelled[0] = true; }
-            @Override public void proceed(String u, String p) { }
-        };
-        client.onReceivedHttpAuthRequest(wv, auth, "intranet.test", "Restricted");
-        assertTrue("HTTP auth prompts must be refused", authCancelled[0]);
-
+        // HttpAuthHandler cannot be constructed outside the framework package, so its
+        // denial is covered by the static regression suite only.
         final boolean[] certCancelled = {false};
         ClientCertRequest cert = new ClientCertRequest() {
             @Override public void proceed(PrivateKey key, X509Certificate[] chain) { }
