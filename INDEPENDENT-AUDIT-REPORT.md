@@ -5,7 +5,7 @@
 ## Evidence available
 
 - `npm test` runs JavaScript checks, some behavior tests, and many static Android and desktop source assertions. Individual test names and pass messages may overstate their scope.
-- GitHub Actions run [40831776617](https://github.com/tarungittarun/Browz/actions/runs/40831776617) passed one Android API 34 emulator smoke test for toolbar visibility, minimum menu height, and opening the menu and tab selector at commit `38cb7c1`. The [Android build](https://github.com/tarungittarun/Browz/actions/runs/40831776694) compiled and checked its signature and manifest. The [automated multi-job workflow](https://github.com/tarungittarun/Browz/actions/runs/40831776719) passed; this is not independent certification or a comprehensive device test.
+- GitHub Actions [run 40832118663](https://github.com/tarungittarun/Browz/actions/runs/40832118663) passed two Android API 34 emulator tests for toolbar visibility, minimum menu height, opening the menu and tab selector, and bookmark removal persistence across Activity relaunch at commit `fe06b41`. The [Android build](https://github.com/tarungittarun/Browz/actions/runs/40832118685) compiled and checked its signature and manifest. The [automated multi-job workflow](https://github.com/tarungittarun/Browz/actions/runs/40832118713) passed; this is not independent certification or a comprehensive device test.
 - These results apply to the tested commit and emulator only; check later workflow runs for changes. No real-device assessment, independent security review, browser compatibility survey, or meaningful anonymity testing has been completed.
 
 ## Known security and privacy limitations

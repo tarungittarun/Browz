@@ -1,4 +1,4 @@
-name: Independent Zero-Bias Red-Team, UX & Security Audit (38 Jobs / 6 Runners)
+name: Automated regression checks (38 jobs)
 
 on:
   push:
@@ -155,11 +155,5 @@ jobs:
       - name: Execute Full Combined Suite & Write Independent Audit Report
         run: |
           npm test
-          echo "## 🛡️ Browz Independent Zero-Bias Audit Scorecard (38 Jobs / 6 Concurrent Runners)" >> $GITHUB_STEP_SUMMARY
-          echo "- **Track 1 (J01–J06)**: Static Code Quality, V8 AST & Supply-Chain Integrity — **6/6 PASS**" >> $GITHUB_STEP_SUMMARY
-          echo "- **Track 2 (J07–J12)**: Red-Team SSRF, IPv6/Hex/Octal/Decimal Bypass, Redirect-to-Loopback, XSS & CSRF — **6/6 PASS**" >> $GITHUB_STEP_SUMMARY
-          echo "- **Track 3 (J13–J18)**: Anti-Fingerprinting, CreepJS \`Function.prototype.toString\` Native Cloaking & Zero-Leak — **6/6 PASS**" >> $GITHUB_STEP_SUMMARY
-          echo "- **Track 4 (J19–J24)**: Live Wi-Fi/Radio, Disk/Stream I/O Firewall, Multi-Container & Formula-Safe Exporters — **6/6 PASS**" >> $GITHUB_STEP_SUMMARY
-          echo "- **Track 5 (J25–J30)**: UX, Full-Bleed Layout, Link/Button Clickability, Video Fit & Electron Sandbox — **6/6 PASS**" >> $GITHUB_STEP_SUMMARY
-          echo "- **Track 6 (J31–J37)**: Android Native DEX/APK Bytecode Audit, Stress Benchmark & 30-Point Competitive Gate — **7/7 PASS**" >> $GITHUB_STEP_SUMMARY
-          echo "- **Final Gate (J38)**: All 21 E2E Suites + 36 Red-Team Jobs + Android Bytecode Inspector — **PASS**" >> $GITHUB_STEP_SUMMARY
+          echo "## Automated regression checks" >> $GITHUB_STEP_SUMMARY
+          echo "The matrix, APK inspection and combined tests passed. Many checks inspect source text; these results are not an independent security audit, end-to-end device verification, or guarantees of anonymity, isolation or compatibility." >> $GITHUB_STEP_SUMMARY

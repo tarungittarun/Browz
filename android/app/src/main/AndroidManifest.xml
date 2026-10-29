@@ -13,7 +13,7 @@
         android:hardwareAccelerated="true"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
 
-        <!-- Opt out of all Android System WebView telemetry & URL reporting -->
+        <!-- Request WebView metrics opt-out; Safe Browsing can use network services. -->
         <meta-data
             android:name="android.webkit.WebView.MetricsOptOut"
             android:value="true" />
