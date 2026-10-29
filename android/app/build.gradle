@@ -5,13 +5,16 @@ plugins {
 android {
     namespace 'com.browz.mobile'
     compileSdk 34
+    useLibrary "android.test.runner"
+    useLibrary "android.test.base"
 
     defaultConfig {
         applicationId "com.browz.mobile"
         minSdk 24
         targetSdk 34
-        versionCode 102
-        versionName "1.0.2"
+        testInstrumentationRunner "android.test.InstrumentationTestRunner"
+        versionCode 103
+        versionName "1.0.3"
     }
 
     signingConfigs {

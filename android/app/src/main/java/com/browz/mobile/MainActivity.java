@@ -171,7 +171,7 @@ public class MainActivity extends Activity {
         ),
         new Persona(
             "tor_mobile",
-            "High-Anonymity Tor Mobile Profile",
+            "Firefox-style mobile profile (not Tor)",
             "Mozilla/5.0 (Android 14; Mobile; rv:128.0) Gecko/128.0 Firefox/128.0",
             "Linux aarch64",
             "Mozilla",
@@ -335,25 +335,29 @@ public class MainActivity extends Activity {
 
         // Shield Button
         TextView shieldBtn = new TextView(this);
-        shieldBtn.setText("Shield");
+        shieldBtn.setText("☰");
+        shieldBtn.setContentDescription("Browser menu");
         shieldBtn.setTextColor(Color.parseColor("#22c55e"));
-        shieldBtn.setTextSize(11.5f);
+        shieldBtn.setTextSize(20f);
+        shieldBtn.setGravity(Gravity.CENTER);
+        shieldBtn.setMinWidth(dp(48));
+        shieldBtn.setMinHeight(dp(48));
         shieldBtn.setTypeface(Typeface.DEFAULT_BOLD);
         shieldBtn.setPadding(dp(9), dp(6), dp(9), dp(6));
         shieldBtn.setBackground(roundBg(Color.parseColor("#121215"), Color.parseColor("#2e2e36"), 14));
-        shieldBtn.setOnClickListener(v -> showShieldsDialog());
+        shieldBtn.setOnClickListener(v -> showBrowserMenu());
         topBar.addView(shieldBtn);
 
         // URL / Search Omnibox
         urlInput = new EditText(this);
-        LinearLayout.LayoutParams urlParams = new LinearLayout.LayoutParams(0, dp(36), 1f);
+        LinearLayout.LayoutParams urlParams = new LinearLayout.LayoutParams(0, dp(48), 1f);
         urlParams.setMargins(dp(5), 0, dp(5), 0);
         urlInput.setLayoutParams(urlParams);
         urlInput.setBackground(roundBg(Color.parseColor("#121215"), Color.parseColor("#2e2e36"), 18));
         urlInput.setPadding(dp(12), 0, dp(12), 0);
         urlInput.setTextColor(Color.parseColor("#f4f4f5"));
         urlInput.setHintTextColor(Color.parseColor("#9ca3af"));
-        urlInput.setHint("Search privately or enter URL...");
+        urlInput.setHint("Search or type address");
         urlInput.setTextSize(13f);
         urlInput.setSingleLine(true);
         urlInput.setSelectAllOnFocus(true);
@@ -377,6 +381,9 @@ public class MainActivity extends Activity {
         // Bookmark Star Button
         starBtn = new TextView(this);
         starBtn.setText("☆");
+        starBtn.setContentDescription("Bookmark this page");
+        starBtn.setMinWidth(dp(48));
+        starBtn.setMinHeight(dp(48));
         starBtn.setTextColor(Color.parseColor("#d4d4d8"));
         starBtn.setTextSize(15f);
         starBtn.setGravity(Gravity.CENTER);
@@ -400,11 +407,16 @@ public class MainActivity extends Activity {
         toolsBtn.setLayoutParams(toolsLp);
         toolsBtn.setBackground(roundBg(Color.parseColor("#222228"), Color.parseColor("#2e2e36"), 8));
         toolsBtn.setOnClickListener(v -> showToolsDialog());
+        // Tools are available from the browser menu to leave room for the address bar.
+        toolsBtn.setVisibility(View.GONE);
         topBar.addView(toolsBtn);
 
         // Tabs Switcher Badge
         tabCountBtn = new TextView(this);
         tabCountBtn.setText("1");
+        tabCountBtn.setContentDescription("Open tabs");
+        tabCountBtn.setMinWidth(dp(48));
+        tabCountBtn.setMinHeight(dp(48));
         tabCountBtn.setTextColor(Color.parseColor("#f4f4f5"));
         tabCountBtn.setTextSize(12f);
         tabCountBtn.setTypeface(Typeface.DEFAULT_BOLD);
@@ -427,6 +439,7 @@ public class MainActivity extends Activity {
         bookmarksContainer.setGravity(Gravity.CENTER_VERTICAL);
         bmScroll.addView(bookmarksContainer);
         root.addView(bmScroll);
+        bmScroll.setVisibility(View.GONE);
         renderBookmarksBar();
 
         // --- 2. THIN ANIMATED PROGRESS BAR ---
@@ -492,11 +505,16 @@ public class MainActivity extends Activity {
         bottomBar.addView(reloadOrStopBtn);
 
         trafficCountBtn = makeBottomBtn("Traffic (0)", v -> showTrafficCaptureDialog());
+        // Traffic is available in the menu rather than crowding navigation.
+        trafficCountBtn.setVisibility(View.GONE);
         bottomBar.addView(trafficCountBtn);
 
         TextView burnBtn = makeBottomBtn("New ID", v -> burnAndRotateIdentity());
         burnBtn.setTextColor(Color.parseColor("#f87171"));
+        burnBtn.setVisibility(View.GONE);
         bottomBar.addView(burnBtn);
+
+        bottomBar.addView(makeBottomBtn("Tabs", v -> showTabsDialog()));
 
         root.addView(bottomBar);
         setContentView(root);
@@ -512,10 +530,11 @@ public class MainActivity extends Activity {
 
     private TextView makeBottomBtn(String label, View.OnClickListener listener) {
         TextView tv = new TextView(this);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(34), 1f);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(48), 1f);
         lp.setMargins(dp(2), 0, dp(2), 0);
         tv.setLayoutParams(lp);
         tv.setText(label);
+        tv.setContentDescription(label);
         tv.setTextColor(Color.parseColor("#d4d4d8"));
         tv.setTextSize(11.5f);
         tv.setTypeface(Typeface.DEFAULT_BOLD);
@@ -701,7 +720,7 @@ public class MainActivity extends Activity {
                     final String cleanLink = cleanAndUpgradeUrl(Uri.parse(rawLink));
                     String[] opts = new String[]{
                         "Open in New Tab",
-                        "Open in Ghost Tab (RAM-Only)",
+                        "Open in low-cache tab (shared site data)",
                         "Copy Clean URL (Tracking Stripped)"
                     };
                     new AlertDialog.Builder(MainActivity.this)
@@ -734,7 +753,6 @@ public class MainActivity extends Activity {
         cm.setAcceptCookie(true);
         cm.setAcceptThirdPartyCookies(wv, false);
 
-        wv.addJavascriptInterface(new BridgeInterface(), "BrowzNative");
 
         wv.setWebViewClient(new WebViewClient() {
             @Override
@@ -803,6 +821,7 @@ public class MainActivity extends Activity {
                     return true;
                 }
 
+                view.removeJavascriptInterface("BrowzNative");
                 String finalUrl = cleanAndUpgradeUrl(uri);
                 if (!finalUrl.equals(uri.toString())) {
                     view.loadUrl(finalUrl, buildPrivacyHeaders());
@@ -815,6 +834,7 @@ public class MainActivity extends Activity {
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
                 boolean isInternal = url != null && url.startsWith("https://browz.local/");
+                if (!isInternal) view.removeJavascriptInterface("BrowzNative");
                 view.evaluateJavascript(buildMobileStealthJs(isInternal), null);
                 BrowserTab tab = findTabByWebView(view);
                 if (tab != null) {
@@ -833,6 +853,7 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 boolean isInternal = url != null && url.startsWith("https://browz.local/");
+                if (!isInternal) view.removeJavascriptInterface("BrowzNative");
                 view.evaluateJavascript(buildMobileStealthJs(isInternal), null);
                 BrowserTab tab = findTabByWebView(view);
                 if (tab != null) {
@@ -858,11 +879,17 @@ public class MainActivity extends Activity {
                         : 0;
 
                     // Automatic transient retry with backoff (up to 2 automatic retries)
-                    if (autoRetryFailed && prevAttempts < 2 && failedUrl.startsWith("http")) {
+                    if (autoRetryFailed && prevAttempts < 2 && failedUrl.startsWith("http")
+                        && "GET".equalsIgnoreCase(request.getMethod())) {
                         final int nextAttempt = prevAttempts + 1;
                         retryAttemptsByUrl.put(failedUrl, nextAttempt);
                         Toast.makeText(MainActivity.this, "Auto-retrying (" + nextAttempt + "/2)...", Toast.LENGTH_SHORT).show();
-                        uiHandler.postDelayed(() -> view.loadUrl(failedUrl, buildPrivacyHeaders()), 350L * nextAttempt);
+                        uiHandler.postDelayed(() -> {
+                            BrowserTab retryTab = findTabByWebView(view);
+                            if (retryTab != null && failedUrl.equals(retryTab.url)) {
+                                view.loadUrl(failedUrl, buildPrivacyHeaders());
+                            }
+                        }, 350L * nextAttempt);
                         return;
                     }
 
@@ -932,7 +959,7 @@ public class MainActivity extends Activity {
                 webViewContainer.removeView(customVideoView);
                 customVideoView = null;
                 if (topBarView != null) topBarView.setVisibility(View.VISIBLE);
-                if (bmScrollView != null) bmScrollView.setVisibility(View.VISIBLE);
+                if (bmScrollView != null) bmScrollView.setVisibility(View.GONE);
                 if (bottomBarView != null) bottomBarView.setVisibility(View.VISIBLE);
                 getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
                 if (customVideoCallback != null) {
@@ -1297,7 +1324,19 @@ public class MainActivity extends Activity {
     private void navigateActiveTab(String rawInput) {
         if (activeTab == null) return;
         String target = resolveInputUrl(rawInput);
+        Uri targetUri = Uri.parse(target);
+        String targetHost = targetUri.getHost();
+        if (targetHost != null && ("browz.local".equalsIgnoreCase(targetHost)
+                || targetHost.toLowerCase(Locale.ROOT).endsWith(".browz.local"))) {
+            Toast.makeText(this, "This address is reserved for Browz", Toast.LENGTH_SHORT).show();
+            return;
+        }
         activeTab.url = target;
+        if (target.startsWith("browz://")) {
+            activeTab.webView.addJavascriptInterface(new BridgeInterface(), "BrowzNative");
+        } else {
+            activeTab.webView.removeJavascriptInterface("BrowzNative");
+        }
         syncBookmarkStar();
 
         if ("browz://home".equals(target)) {
@@ -1359,6 +1398,7 @@ public class MainActivity extends Activity {
             "  }" +
             "}" +
             "</script></body></html>";
+        wv.addJavascriptInterface(new BridgeInterface(), "BrowzNative");
         wv.loadDataWithBaseURL("https://browz.local/", html, "text/html", "UTF-8", null);
     }
 
@@ -1383,6 +1423,7 @@ public class MainActivity extends Activity {
             ".val{font-family:monospace;font-size:11px;color:#9ca3af;word-break:break-all}" +
             "</style></head><body>" +
             "<div class='head'><h2>🛡️ Live 18-Point Mobile Security Audit</h2><span class='badge' id='scoreBadge'>Running...</span></div>" +
+            "<div class='sub'>These checks are illustrative, not an independent security audit. Some are not verified; passing does not guarantee anonymity or protection.</div>" +
             "<div class='sub'>Persona: <strong>" + p.label + "</strong> · Seed <strong>#" + noiseSeed + "</strong></div>" +
             "<div class='btns'>" +
             "<button class='pri' onclick='runMobileAudit()'>↻ Re-Run 18 Checks</button>" +
@@ -1398,7 +1439,7 @@ public class MainActivity extends Activity {
             "  const checks = [];" +
             "  let nativeStats = { blockedTrackers: " + blockedTrackersCount + ", strippedParams: " + strippedParamsCount + ", flagSecure: " + screenSecurityFlag + " };" +
             "  try { if(window.BrowzNative) nativeStats = JSON.parse(window.BrowzNative.getNativeAuditStats(SEC)); } catch(e){}" +
-            "  checks.push({ n: '1. OS Zero-Permission Lockdown', p: true, d: 'INTERNET only — Zero GPS, Camera, Mic, Contacts or Storage' });" +
+            "  checks.push({ n: '1. OS Zero-Permission Lockdown', p: false, d: 'INTERNET only — Zero GPS, Camera, Mic, Contacts or Storage' });" +
             "  checks.push({ n: '2. OS Screenshot Block (FLAG_SECURE)', p: Boolean(nativeStats.flagSecure), d: 'WindowManager.LayoutParams.FLAG_SECURE=' + nativeStats.flagSecure });" +
             "  let rtcBlocked = false; try { new window.RTCPeerConnection(); } catch(e){ rtcBlocked = true; }" +
             "  checks.push({ n: '3. WebRTC Local/ISP IP Leak Kill-Switch', p: rtcBlocked, d: 'RTCPeerConnection throws NotAllowedError' });" +
@@ -1422,8 +1463,8 @@ public class MainActivity extends Activity {
             "  checks.push({ n: '15. MediaDevices Camera/Mic Enumeration Block', p: mDevs.length === 0, d: 'enumerateDevices() returned 0 devices' });" +
             "  let qOk = true; try { if(navigator.storage && navigator.storage.estimate){ const es = await navigator.storage.estimate(); qOk = es.quota === 10737418240; } } catch(e){}" +
             "  checks.push({ n: '16. Storage Quota (10GB) & Speech Voices Masking', p: qOk, d: 'Quota normalized to 10.0 GB · OS Voices=0' });" +
-            "  checks.push({ n: '17. Native Ad/Pixel/SDK Tracker Firewall', p: true, d: '20 tracker domains blocked · Blocked so far: ' + nativeStats.blockedTrackers });" +
-            "  checks.push({ n: '18. 35+ URL Param Stripper, SSRF & file:// Block', p: true, d: 'utm_*, fbclid, gclid, ttclid stripped (' + nativeStats.strippedParams + ') · 3rd-party cookies blocked' });" +
+            "  checks.push({ n: '17. Native Ad/Pixel/SDK Tracker Firewall', p: false, d: '20 tracker domains blocked · Blocked so far: ' + nativeStats.blockedTrackers });" +
+            "  checks.push({ n: '18. 35+ URL Param Stripper, SSRF & file:// Block', p: false, d: 'utm_*, fbclid, gclid, ttclid stripped (' + nativeStats.strippedParams + ') · 3rd-party cookies blocked' });" +
             "  const connVal = navigator.connection;" +
             "  checks.push({ n: '19. Wi-Fi / Radio & Air-Gap Controller', p: connVal === undefined || Boolean(connVal.type), d: connVal === undefined ? 'Stealth Masked (navigator.connection=undefined)' : 'Simulated Radio: ' + connVal.type + ' (' + connVal.downlink + ' Mbps)' });" +
             "  let swBlocked = false; try { if(!navigator.serviceWorker) swBlocked = true; else await navigator.serviceWorker.register('/sw.js'); } catch(e){ swBlocked = true; }" +
@@ -1431,14 +1472,15 @@ public class MainActivity extends Activity {
             "  let cBlocked = false; try { if(!window.caches) cBlocked = true; else await window.caches.open('trk'); } catch(e){ cBlocked = true; }" +
             "  checks.push({ n: '21. CacheStorage Supercookie I/O Block', p: cBlocked, d: 'window.caches supercookie storage blocked' });" +
             "  checks.push({ n: '22. Local File Picker & OPFS Disk I/O Block', p: window.showOpenFilePicker === undefined, d: 'showOpenFilePicker & OPFS getDirectory = undefined' });" +
-            "  checks.push({ n: '23. Clipboard Snooping & Timer Jitter Guard', p: true, d: 'Clipboard readText blocked + performance.now jittered' });" +
+            "  checks.push({ n: '23. Clipboard Snooping & Timer Jitter Guard', p: false, d: 'Clipboard readText blocked + performance.now jittered' });" +
             "  checks.push({ n: '24. Video Fit-to-Screen & Immersive Fullscreen', p: typeof window.__browzToggleVideoFit === 'function', d: '1-Click Video Fit & Immersive Fullscreen active' });" +
             "  const passCount = checks.filter(x => x.p).length;" +
-            "  document.getElementById('scoreBadge').textContent = passCount + ' / ' + checks.length + ' PASSED';" +
+            "  document.getElementById('scoreBadge').textContent = passCount + ' / ' + checks.length + ' observed checks (not an audit)';" +
             "  document.getElementById('list').innerHTML = checks.map(c => `<div class='item'><div class='row'><span>${c.n}</span><span class='pass'>${c.p ? 'PASS' : 'WARN'}</span></div><div class='val'>${c.d}</div></div>`).join('');" +
             "}" +
             "setTimeout(runMobileAudit, 60);" +
             "</script></body></html>";
+        wv.addJavascriptInterface(new BridgeInterface(), "BrowzNative");
         wv.loadDataWithBaseURL("https://browz.local/", html, "text/html", "UTF-8", null);
     }
 
@@ -1475,7 +1517,7 @@ public class MainActivity extends Activity {
             "<div class='btns'>" +
             "<button onclick=\"if(window.__browzToggleVideoFit) log('Video Fit-to-Screen: ' + window.__browzToggleVideoFit());\">🎬 Fit Video to Screen</button>" +
             "</div></div>" +
-            "<pre id='out'>Ready. Tap any test button above, then tap 'Traffic (N)' in the bottom bar to inspect or export HAR JSON.</pre>" +
+            "<pre id='out'>Ready. Tap any test button above, then tap 'Traffic (N)' in the bottom bar to inspect the partial request log.</pre>" +
             "<script>" +
             "const out = document.getElementById('out');" +
             "function log(m){ out.textContent = '[' + new Date().toLocaleTimeString() + '] ' + m; }" +
@@ -1499,14 +1541,15 @@ public class MainActivity extends Activity {
             "  catch(e){ log('WebRTC Blocked: ' + e.message); }" +
             "}" +
             "</script></body></html>";
+        wv.addJavascriptInterface(new BridgeInterface(), "BrowzNative");
         wv.loadDataWithBaseURL("https://browz.local/", html, "text/html", "UTF-8", null);
     }
 
     private void loadHomeIntoWebView(WebView wv) {
         Persona p = personas.get(activePersonaIdx);
         String modeLabel = (activeTab != null && activeTab.ghostMode)
-            ? "Ghost Mode (RAM-Only · Zero Cache)"
-            : "Mobile Stealth & Untraceable Session Active";
+            ? "Low-cache tab · site data shared with other tabs"
+            : "Mobile browsing · privacy controls available";
         String html = "<!DOCTYPE html><html><head><meta charset='UTF-8'>" +
             "<meta name='viewport' content='width=device-width,initial-scale=1.0'>" +
             "<title>New Tab</title>" +
@@ -1536,7 +1579,7 @@ public class MainActivity extends Activity {
             "<button type='submit'>Go</button>" +
             "</form>" +
             "<div class='grid'>" +
-            "<div class='tile' onclick=\"nav('browz://security')\"><div class='icon' style='color:#22c55e;border:1px solid rgba(34,197,94,0.4)'>18</div><span>Security Audit</span></div>" +
+            "<div class='tile' onclick=\"nav('browz://security')\"><div class='icon' style='color:#22c55e;border:1px solid rgba(34,197,94,0.4)'>18</div><span>Privacy Checks</span></div>" +
             "<div class='tile' onclick=\"nav('browz://testbench')\"><div class='icon' style='color:#3b82f6;border:1px solid rgba(59,130,246,0.4)'>API</div><span>Testbench</span></div>" +
             "<div class='tile' onclick=\"nav('https://duckduckgo.com')\"><div class='icon'>D</div><span>DuckDuckGo</span></div>" +
             "<div class='tile' onclick=\"nav('https://www.google.com')\"><div class='icon'>G</div><span>Google</span></div>" +
@@ -1547,12 +1590,12 @@ public class MainActivity extends Activity {
             "<div>Masked Profile: <strong>" + p.label + "</strong></div>" +
             "<div>Spoofed GPU: <strong>" + p.webglVendor + " / " + p.webglRenderer + "</strong></div>" +
             "<div>Timezone: <strong>" + p.timezone + "</strong> · Canvas Seed: <strong>#" + noiseSeed + "</strong></div>" +
-            "<div>WebRTC IP Leak: <strong>Blocked</strong> · Motion Sensors: <strong>Blocked</strong></div>" +
+            "<div>Privacy controls are best-effort; Browz does not hide your IP.</div>" +
             "<div>Trackers Blocked: <strong>" + blockedTrackersCount + "</strong> · URL Params Stripped: <strong>" + strippedParamsCount + "</strong></div>" +
             "<div class='row-btns'>" +
             "<div class='btn' onclick='rot()'>Rotate Identity</div>" +
             "<div class='btn' onclick='shd()'>Customize Shields</div>" +
-            "<div class='btn' onclick=\"nav('browz://security')\">18-Point Check</div>" +
+            "<div class='btn' onclick=\"nav('browz://security')\">Privacy Checks</div>" +
             "</div>" +
             "</div>" +
             "</div>" +
@@ -1564,7 +1607,74 @@ public class MainActivity extends Activity {
             "function doSearch(e){e.preventDefault();var v=document.getElementById('q').value;if(v){nav(v);}}" +
             "</script></body></html>";
 
+        wv.addJavascriptInterface(new BridgeInterface(), "BrowzNative");
         wv.loadDataWithBaseURL("https://browz.local/", html, "text/html", "UTF-8", null);
+    }
+
+    private void showBrowserMenu() {
+        String[] items = {"New tab", "Bookmarks", "Find, zoom and video", "Privacy controls",
+            "Request log", "Share page", "Clear browsing data", "Privacy and limitations"};
+        new AlertDialog.Builder(this).setTitle("Browz")
+            .setItems(items, (dialog, which) -> {
+                switch (which) {
+                    case 0: createAndSwitchTab("browz://home", false); break;
+                    case 1: showBookmarksDialog(); break;
+                    case 2: showToolsDialog(); break;
+                    case 3: showShieldsDialog(); break;
+                    case 4: showTrafficCaptureDialog(); break;
+                    case 5: shareCurrentPage(); break;
+                    case 6: confirmClearBrowsingData(); break;
+                    case 7: showPrivacyInfo(); break;
+                }
+            }).setNegativeButton("Close", null).show();
+    }
+
+    private void showBookmarksDialog() {
+        if (bookmarks.isEmpty()) {
+            Toast.makeText(this, "No bookmarks yet", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        String[] labels = new String[bookmarks.size()];
+        for (int i = 0; i < bookmarks.size(); i++) labels[i] = bookmarks.get(i).title;
+        new AlertDialog.Builder(this).setTitle("Bookmarks (current session)")
+            .setItems(labels, (dialog, which) -> navigateActiveTab(bookmarks.get(which).url))
+            .setNegativeButton("Close", null).show();
+    }
+
+    private void shareCurrentPage() {
+        if (activeTab == null || !(activeTab.url.startsWith("https://") || activeTab.url.startsWith("http://"))) {
+            Toast.makeText(this, "Open a web page to share it", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        Intent share = new Intent(Intent.ACTION_SEND);
+        share.setType("text/plain");
+        share.putExtra(Intent.EXTRA_TEXT, activeTab.url);
+        startActivity(Intent.createChooser(share, "Share page"));
+    }
+
+    private void confirmClearBrowsingData() {
+        new AlertDialog.Builder(this).setTitle("Clear browsing data?")
+            .setMessage("Clears cookies, site storage, cache, history and the request log for all tabs. You may be signed out. Bookmarks are kept for this session.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Clear", (dialog, which) -> {
+                CookieManager cm = CookieManager.getInstance();
+                cm.removeAllCookies(value -> cm.flush());
+                WebStorage.getInstance().deleteAllData();
+                for (BrowserTab tab : tabs) {
+                    tab.webView.clearCache(true);
+                    tab.webView.clearHistory();
+                    tab.webView.clearFormData();
+                }
+                synchronized (this) { capturedEntries.clear(); }
+                trafficCountBtn.setText("Traffic (0)");
+                Toast.makeText(this, "Browsing data cleared", Toast.LENGTH_SHORT).show();
+            }).show();
+    }
+
+    private void showPrivacyInfo() {
+        new AlertDialog.Builder(this).setTitle("Privacy and limitations")
+            .setMessage("Browz is not Tor or a VPN: websites and network providers may see your IP address. Android WebView shares cookies and site storage across tabs; low-cache tabs are not private or isolated. Request logging is incomplete and cannot show response status or bodies. Network profiles simulate web-facing values, not device Wi-Fi controls. Some page-level shields run after page scripts and are not guaranteed. Android, keyboards and other privileged software may access data.")
+            .setPositiveButton("Understood", null).show();
     }
 
     private void showToolsDialog() {
@@ -1603,9 +1713,9 @@ public class MainActivity extends Activity {
             activeTab.webView.getSettings().setTextZoom(activeTab.zoomPercent);
             zoomTitle.setText("Page Zoom: " + activeTab.zoomPercent + "%");
         });
-        zoomRow.addView(btnZoomOut);
-        zoomRow.addView(btnZoomReset);
-        zoomRow.addView(btnZoomIn);
+        zoomRow.addView(btnZoomOut, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        zoomRow.addView(btnZoomReset, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        zoomRow.addView(btnZoomIn, new LinearLayout.LayoutParams(0, dp(48), 1f));
         box.addView(zoomRow);
 
         // 2. Find in Page
@@ -1639,9 +1749,9 @@ public class MainActivity extends Activity {
             findInput.setText("");
             activeTab.webView.clearMatches();
         });
-        findBtns.addView(btnFind);
-        findBtns.addView(btnNext);
-        findBtns.addView(btnClearFind);
+        findBtns.addView(btnFind, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        findBtns.addView(btnNext, new LinearLayout.LayoutParams(0, dp(48), 1f));
+        findBtns.addView(btnClearFind, new LinearLayout.LayoutParams(0, dp(48), 1f));
         box.addView(findBtns);
 
         // 3. 1-Click Fit Video to Full Screen & Radio Profile Switcher
@@ -1651,28 +1761,28 @@ public class MainActivity extends Activity {
             if (activeTab != null) {
                 activeTab.webView.evaluateJavascript(
                     "window.__browzToggleVideoFit ? window.__browzToggleVideoFit() : false",
-                    res -> Toast.makeText(MainActivity.this, "Toggled Video Fit-to-Screen", Toast.LENGTH_SHORT).show()
+                    res -> Toast.makeText(MainActivity.this, "true".equals(res) ? "Video fitted" : "Video fit exited or no video found", Toast.LENGTH_SHORT).show()
                 );
             }
         });
         box.addView(btnFitVideo);
 
         Button btnRadioMode = new Button(this);
-        btnRadioMode.setText("📡 Wi-Fi / Radio Mode: " + radioProfile);
+        btnRadioMode.setText("Network info simulation: " + radioProfile);
         btnRadioMode.setOnClickListener(v -> {
             String[] modes = new String[]{"stealth_hidden", "wifi_fiber", "cellular_4g", "cellular_3g_saver", "airgap_killswitch"};
             String[] labels = new String[]{
                 "Stealth Mask (Hide Wi-Fi / Radio Type)",
-                "Wi-Fi 6 Fiber (100 Mbps, 5ms RTT)",
-                "Cellular 4G LTE (12 Mbps, 45ms RTT)",
-                "Cellular 3G + Data Saver (Save-Data: on)",
-                "Air-Gap Radio Kill-Switch (Cut All Network I/O)"
+                "Report Wi-Fi (simulation only)",
+                "Report cellular 4G (simulation only)",
+                "Report cellular 3G (simulation only)",
+                "Attempt to block WebView requests (not a device firewall)"
             };
             new AlertDialog.Builder(MainActivity.this)
-                .setTitle("Select Wi-Fi / Radio & I/O Profile")
+                .setTitle("Network info simulation (not device Wi-Fi)")
                 .setItems(labels, (d2, idx) -> {
                     radioProfile = modes[idx];
-                    btnRadioMode.setText("📡 Wi-Fi / Radio Mode: " + radioProfile);
+                    btnRadioMode.setText("Network info simulation: " + radioProfile);
                     if (activeTab != null) navigateActiveTab(activeTab.url);
                     Toast.makeText(MainActivity.this, "Applied Radio Profile: " + labels[idx], Toast.LENGTH_SHORT).show();
                 })
@@ -1680,10 +1790,13 @@ public class MainActivity extends Activity {
         });
         box.addView(btnRadioMode);
 
+        ScrollView toolsScroll = new ScrollView(this);
+        toolsScroll.setFillViewport(false);
+        toolsScroll.addView(box);
         new AlertDialog.Builder(this)
-            .setTitle("Browser Tools (Zoom, Find, Video Fit & Radio)")
-            .setView(box)
-            .setPositiveButton("24-Point Security Check", (d, w) -> navigateActiveTab("browz://security"))
+            .setTitle("Page tools")
+            .setView(toolsScroll)
+            .setPositiveButton("Illustrative checks", (d, w) -> navigateActiveTab("browz://security"))
             .setNeutralButton("API & Video Testbench", (d, w) -> navigateActiveTab("browz://testbench"))
             .setNegativeButton("Done", null)
             .show();
@@ -1748,17 +1861,17 @@ public class MainActivity extends Activity {
         box.addView(makeCheck("WebGL Mobile GPU Spoofing", shieldWebGL, c -> shieldWebGL = c));
         box.addView(makeCheck("AudioContext & AnalyserNode Noise", shieldAudio, c -> shieldAudio = c));
         box.addView(makeCheck("ClientRects Font-Measurement Jitter", shieldClientRects, c -> shieldClientRects = c));
-        box.addView(makeCheck("Block WebRTC IP Leak (STUN/ICE)", shieldWebRTC, c -> shieldWebRTC = c));
+        box.addView(makeCheck("Attempt to block WebRTC in pages", shieldWebRTC, c -> shieldWebRTC = c));
         box.addView(makeCheck("Spoof High-Entropy Client Hints (userAgentData)", shieldClientHints, c -> shieldClientHints = c));
         box.addView(makeCheck("Block Gyroscope, Accelerometer, Battery & USB", shieldSensors, c -> shieldSensors = c));
         box.addView(makeCheck("Mask Storage Quota (10GB) & Speech Voices", shieldStorageAndVoices, c -> shieldStorageAndVoices = c));
         box.addView(makeCheck("Spoof Timezone (UTC) & Locale", shieldTimezone, c -> shieldTimezone = c));
-        box.addView(makeCheck("Block ServiceWorker Disk Persistence", blockServiceWorkers, c -> blockServiceWorkers = c));
-        box.addView(makeCheck("Block CacheStorage Supercookie I/O", blockCacheStorage, c -> blockCacheStorage = c));
+        box.addView(makeCheck("Attempt to block ServiceWorkers in pages", blockServiceWorkers, c -> blockServiceWorkers = c));
+        box.addView(makeCheck("Attempt to block CacheStorage in pages", blockCacheStorage, c -> blockCacheStorage = c));
         box.addView(makeCheck("Block Local File Picker & OPFS Disk I/O", blockFileSystemAccess, c -> blockFileSystemAccess = c));
         box.addView(makeCheck("Block Silent Clipboard Read Snooping", blockClipboardRead, c -> blockClipboardRead = c));
-        box.addView(makeCheck("Kill-Switch: Block Live WebSockets", blockWebSockets, c -> blockWebSockets = c));
-        box.addView(makeCheck("High-Resolution Timer Jitter (Anti-Spectre)", timerJitter, c -> timerJitter = c));
+        box.addView(makeCheck("Attempt to block WebSockets in pages", blockWebSockets, c -> blockWebSockets = c));
+        box.addView(makeCheck("Reduce timer precision in pages", timerJitter, c -> timerJitter = c));
         box.addView(makeCheck("Block 20+ Ad, Pixel & Mobile SDK Trackers", blockTrackers, c -> blockTrackers = c));
         box.addView(makeCheck("Strip 35+ URL Tracking Params (utm_*, fbclid)", stripUrlParams, c -> stripUrlParams = c));
         box.addView(makeCheck("Auto-Retry Transient Network Errors (2x)", autoRetryFailed, c -> autoRetryFailed = c));
@@ -1775,14 +1888,14 @@ public class MainActivity extends Activity {
         sv.addView(box);
 
         new AlertDialog.Builder(this)
-            .setTitle("Triple-Layer Stealth Shields")
+            .setTitle("Privacy controls (some may break sites)")
             .setView(sv)
             .setPositiveButton("Apply & Reload", (d, w) -> {
                 if (activeTab != null) {
                     navigateActiveTab(activeTab.url);
                 }
             })
-            .setNeutralButton("18-Point Audit", (d, w) -> navigateActiveTab("browz://security"))
+            .setNeutralButton("Illustrative checks", (d, w) -> navigateActiveTab("browz://security"))
             .setNegativeButton("Burn Identity", (d, w) -> burnAndRotateIdentity())
             .show();
     }
@@ -1804,7 +1917,7 @@ public class MainActivity extends Activity {
         for (int i = 0; i < tabs.size(); i++) {
             BrowserTab t = tabs.get(i);
             String marker = (t == activeTab) ? "● " : "  ";
-            String modeTag = t.ghostMode ? "[Ghost] " : "";
+            String modeTag = t.ghostMode ? "[Low-cache] " : "";
             items[i] = marker + modeTag + "Tab " + (i + 1) + ": " + t.title + " (" + t.url + ")";
         }
 
@@ -1812,12 +1925,13 @@ public class MainActivity extends Activity {
             .setTitle("Open Tabs (" + tabs.size() + ")")
             .setItems(items, (d, which) -> switchToTab(tabs.get(which)))
             .setPositiveButton("+ New Tab", (d, w) -> createAndSwitchTab("browz://home", false))
-            .setNeutralButton("+ Ghost Tab (RAM)", (d, w) -> createAndSwitchTab("browz://home", true))
+            .setNeutralButton("+ Low-cache tab", (d, w) -> createAndSwitchTab("browz://home", true))
             .setNegativeButton("Close Active Tab", (d, w) -> {
                 if (tabs.size() <= 1) {
                     burnAndRotateIdentity();
                     navigateActiveTab("browz://home");
                 } else if (activeTab != null) {
+                    webViewContainer.removeView(activeTab.webView);
                     activeTab.webView.destroy();
                     tabs.remove(activeTab);
                     switchToTab(tabs.get(tabs.size() - 1));
@@ -1827,21 +1941,23 @@ public class MainActivity extends Activity {
     }
 
     private void showTrafficCaptureDialog() {
+        List<CapturedEntry> entries;
+        synchronized (this) { entries = new ArrayList<>(capturedEntries); }
         StringBuilder sb = new StringBuilder();
-        sb.append("Total Captured: ").append(capturedEntries.size())
+        sb.append("Partial request log: WebView does not provide response status, bodies, or all network traffic. URLs may contain sensitive data.\n\nTotal observed: ").append(entries.size())
           .append(" | Trackers Blocked: ").append(blockedTrackersCount)
           .append(" | URL Params Stripped: ").append(strippedParamsCount)
           .append("\n\n");
 
-        int limit = Math.min(capturedEntries.size(), 80);
+        int limit = Math.min(entries.size(), 80);
         for (int i = 0; i < limit; i++) {
-            CapturedEntry e = capturedEntries.get(i);
+            CapturedEntry e = entries.get(i);
             sb.append("#").append(e.seq).append(" [").append(e.timestamp).append("] ")
-              .append(e.blocked ? "BLOCKED (" + e.reason + ") " : "200 OK ")
+              .append(e.blocked ? "BLOCKED (" + e.reason + ") " : "OBSERVED (response unknown) ")
               .append(e.method).append(" ").append(e.url).append("\n\n");
         }
-        if (capturedEntries.isEmpty()) {
-            sb.append("No requests captured yet. Browse any site or open the Mobile API Testbench to capture live HTTP/HTTPS traffic.");
+        if (entries.isEmpty()) {
+            sb.append("No observable requests yet. WebView does not expose every request or response.");
         }
 
         ScrollView sv = new ScrollView(this);
@@ -1855,32 +1971,25 @@ public class MainActivity extends Activity {
         new AlertDialog.Builder(this)
             .setTitle("Captured Network Traffic")
             .setView(sv)
-            .setPositiveButton("Copy HAR 1.2 JSON", (d, w) -> copyHarToClipboard())
+            .setPositiveButton("Copy request log", (d, w) -> copyRequestLog())
             .setNeutralButton("Clear Log", (d, w) -> {
-                capturedEntries.clear();
+                synchronized (this) { capturedEntries.clear(); }
                 trafficCountBtn.setText("Traffic (0)");
             })
             .setNegativeButton("Close", null)
             .show();
     }
 
-    private void copyHarToClipboard() {
-        StringBuilder json = new StringBuilder();
-        json.append("{\"log\":{\"version\":\"1.2\",\"creator\":{\"name\":\"Browz Mobile\",\"version\":\"1.0.0\"},\"entries\":[");
-        for (int i = 0; i < capturedEntries.size(); i++) {
-            CapturedEntry e = capturedEntries.get(i);
-            if (i > 0) json.append(",");
-            String safeUrl = e.url.replace("\"", "\\\"");
-            json.append("{\"startedDateTime\":\"").append(e.timestamp).append("\",")
-                .append("\"request\":{\"method\":\"").append(e.method).append("\",\"url\":\"").append(safeUrl).append("\"},")
-                .append("\"response\":{\"status\":").append(e.blocked ? 0 : 200).append(",\"statusText\":\"").append(e.reason).append("\"}}");
+    private synchronized void copyRequestLog() {
+        StringBuilder text = new StringBuilder("Browz mobile: partial request log; responses are not captured.\n");
+        for (CapturedEntry e : capturedEntries) {
+            text.append(e.timestamp).append(" ").append(e.method).append(" ")
+                .append(e.url).append(e.blocked ? " [blocked]" : " [response unknown]").append("\n");
         }
-        json.append("]}}");
-
         ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (cm != null) {
-            cm.setPrimaryClip(ClipData.newPlainText("Browz HAR Export", json.toString()));
-            Toast.makeText(this, "Copied HAR 1.2 JSON (" + capturedEntries.size() + " entries) to Clipboard!", Toast.LENGTH_SHORT).show();
+            cm.setPrimaryClip(ClipData.newPlainText("Browz request log", text.toString()));
+            Toast.makeText(this, "Request log copied; it may contain sensitive URLs", Toast.LENGTH_LONG).show();
         }
     }
 
@@ -1890,7 +1999,7 @@ public class MainActivity extends Activity {
             webViewContainer.removeView(customVideoView);
             customVideoView = null;
             if (topBarView != null) topBarView.setVisibility(View.VISIBLE);
-            if (bmScrollView != null) bmScrollView.setVisibility(View.VISIBLE);
+            if (bmScrollView != null) bmScrollView.setVisibility(View.GONE);
             if (bottomBarView != null) bottomBarView.setVisibility(View.VISIBLE);
             getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_VISIBLE);
             if (customVideoCallback != null) {
@@ -1914,6 +2023,9 @@ public class MainActivity extends Activity {
             cm.flush();
             WebStorage.getInstance().deleteAllData();
             for (BrowserTab t : tabs) {
+                if (t.webView.getParent() instanceof ViewGroup) {
+                    ((ViewGroup) t.webView.getParent()).removeView(t.webView);
+                }
                 t.webView.clearCache(true);
                 t.webView.clearHistory();
                 t.webView.clearFormData();

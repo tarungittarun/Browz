@@ -38,20 +38,20 @@ jobs:
       - name: Compile & Sign Browz Mobile APK
         run: |
           gradle assembleRelease -p android --no-daemon
-          cp android/app/build/outputs/apk/release/app-release.apk Browz-Mobile-1.0.0.apk
-          ls -lh Browz-Mobile-1.0.0.apk
+          cp android/app/build/outputs/apk/release/app-release.apk Browz-Mobile-1.0.3-test.apk
+          ls -lh Browz-Mobile-1.0.3-test.apk
 
       - name: Verify Signed APK Binary, Pinned Keystore Fingerprint & Permissions (apksigner + aapt)
         run: |
           BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
           echo "Using Android Build Tools: $BUILD_TOOLS_DIR"
-          CERTS=$("$BUILD_TOOLS_DIR/apksigner" verify --verbose --print-certs Browz-Mobile-1.0.0.apk)
+          CERTS=$("$BUILD_TOOLS_DIR/apksigner" verify --verbose --print-certs Browz-Mobile-1.0.3-test.apk)
           echo "$CERTS"
           if ! echo "$CERTS" | grep -qi "94af295478718c92fa1636a722c2b0fd68f4d64a8a0f849c96d0d28ec9f43f26"; then
             echo "ERROR: APK signing certificate SHA-256 does not match pinned browz-release.p12!"
             exit 1
           fi
-          PERMS=$("$BUILD_TOOLS_DIR/aapt" dump permissions Browz-Mobile-1.0.0.apk)
+          PERMS=$("$BUILD_TOOLS_DIR/aapt" dump permissions Browz-Mobile-1.0.3-test.apk)
           echo "$PERMS"
           if echo "$PERMS" | grep -E "ACCESS_FINE_LOCATION|CAMERA|RECORD_AUDIO|READ_CONTACTS"; then
             echo "ERROR: Forbidden tracking permission detected in APK!"
@@ -59,14 +59,11 @@ jobs:
           fi
           echo "APK pinned cryptographic signature and zero-telemetry permission audit passed!"
 
-      - name: Publish Browz-Mobile-1.0.0.apk to GitHub Release (v1.0.0)
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload v1.0.0 Browz-Mobile-1.0.0.apk --clobber
+      # Do not publish automatically: the historical release key is exposed in the repository.
+      # An artifact is for testing, not a trusted production release.
 
       - name: Upload Android APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Browz-Mobile-1.0.0-APK
-          path: Browz-Mobile-1.0.0.apk
+          name: Browz-Mobile-1.0.3-test-APK
+          path: Browz-Mobile-1.0.3-test.apk
