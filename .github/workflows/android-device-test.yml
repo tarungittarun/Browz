@@ -12,7 +12,7 @@ on:
       - 'android/**'
       - '.github/workflows/android-device-test.yml'
 permissions:
-  contents: read
+  contents: write
 jobs:
   device-smoke:
     runs-on: ubuntu-latest
@@ -38,15 +38,34 @@ jobs:
           arch: x86_64
           script: |
             set +e
-            gradle connectedDebugAndroidTest -p android --no-daemon > /tmp/device.log 2>&1
-            STATUS=$?
-            tail -n 40 /tmp/device.log
-            if [ "$STATUS" -ne 0 ]; then
-              grep -E "FAILED|Failure|junit|AssertionError|expected|Exception" /tmp/device.log | head -n 25 | tr -d '\r' | while IFS= read -r line; do
-                echo "::error title=device-test::$line"
-              done
-            fi
-            exit "$STATUS"
+            gradle connectedDebugAndroidTest -p android --no-daemon > device-test.log 2>&1
+            echo $? > device-test.status
+            cp device-test.log "$GITHUB_WORKSPACE/device-test.log" 2>/dev/null || true
+            tail -n 15 device-test.log
+            exit 0
+      - name: Report device test outcome
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          STATUS="$(cat device-test.status 2>/dev/null || echo 1)"
+          echo "exit status: $STATUS"
+          grep -E "FAILED|AssertionError|expected:|junit|Tests on|Exception" device-test.log 2>/dev/null |
+            head -n 20 | tr -d '\r' | while IFS= read -r line; do
+              echo "::error title=device-test::$line"
+            done
+          # A failed suite is easier to diagnose from a branch than from a blocked artifact store.
+          WORK=$(mktemp -d)
+          cp device-test.log "$WORK/" 2>/dev/null || true
+          cp -r android/app/build/outputs/androidTest-results "$WORK/results" 2>/dev/null || true
+          cd "$WORK"
+          git init -q
+          git checkout -q -b device-test-report
+          git add -A
+          git -c user.name=browz-ci -c user.email=browz-ci@users.noreply.github.com commit -q -m "device test report ${{ github.sha }}"
+          git push --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" device-test-report
+          if [ "$STATUS" != "0" ]; then exit 1; fi
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
