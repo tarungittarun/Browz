@@ -51,6 +51,23 @@ assert.ok(!nsc.includes('certificates src="user"'), 'user-installed CAs must not
 assert.ok(java.includes('"http".equals(scheme) || "https".equals(scheme)'));
 // Honest naming for the in-app checks.
 assert.ok(java.includes('not a security audit or a guarantee'));
+
+// Session data must be wiped before the first page can read it.
+const onCreateBody = java.slice(java.indexOf('protected void onCreate'), java.indexOf('private TextView makeBottomBtn'));
+assert.ok(onCreateBody.includes('removeAllCookies'), 'launch must wipe cookies left by a crash');
+assert.ok(onCreateBody.indexOf('removeAllCookies') < onCreateBody.indexOf('createAndSwitchTab'),
+  'the wipe must happen before the first page opens');
+assert.ok(java.includes('"sessionOpen"'));
+
+// Release tooling must never publish a preview-signed APK.
+const releaseWorkflow = fs.readFileSync('.github/workflows/release-android.yml', 'utf8');
+assert.ok(releaseWorkflow.includes('Refuse to release without an owner-held key'));
+assert.ok(!/env:[\s\S]{0,120}BROWZ_ALLOW_EXPOSED_KEY/.test(releaseWorkflow),
+  'release must not enable the exposed-key allowance');
+assert.ok(releaseWorkflow.includes('--draft'), 'releases must start as drafts');
+const verifyTool = fs.readFileSync('tools/verify-download.sh', 'utf8');
+assert.ok(verifyTool.includes('94af295478718c92fa1636a722c2b0fd68f4d64a8a0f849c96d0d28ec9f43f26'));
+assert.ok(verifyTool.includes('apksigner verify'));
 assert.ok(!java.includes('18-Point Mobile Security Audit'));
 assert.ok(java.includes('saveBookmarks()') && java.includes('loadBookmarks()'));
 assert.ok(java.includes('status not measured'));
