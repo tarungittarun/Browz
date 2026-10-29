@@ -10,7 +10,7 @@ AAPT="$BUILD_TOOLS_DIR/aapt"
 APKSIGNER="$BUILD_TOOLS_DIR/apksigner"
 fail=0
 note() { printf '  %s\n' "$1"; }
-bad() { printf '  FAIL: %s\n' "$1"; fail=1; }
+bad() { printf '  FAIL: %s\n' "$1"; echo "::error title=artifact-verification::$1"; fail=1; }
 ok() { printf '  ok: %s\n' "$1"; }
 
 echo "Verifying $APK"

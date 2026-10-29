@@ -36,11 +36,22 @@ jobs:
         with:
           api-level: 34
           arch: x86_64
-          script: gradle connectedDebugAndroidTest -p android --no-daemon
+          script: |
+            set -o pipefail
+            gradle connectedDebugAndroidTest -p android --no-daemon 2>&1 | tee /tmp/device.log
+            STATUS=${PIPESTATUS[0]}
+            if [ "$STATUS" -ne 0 ]; then
+              grep -E "FAILED|Failure|junit|AssertionError|expected|Exception" /tmp/device.log | head -n 25 | tr -d '\r' | while IFS= read -r line; do
+                echo "::error title=device-test::$line"
+              done
+            fi
+            exit "$STATUS"
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: android-device-test-results
-          path: android/app/build/reports/androidTests/
-          if-no-files-found: warn
+          path: |
+            android/app/build/outputs/androidTest-results/
+            android/app/build/reports/androidTests/
+          if-no-files-found: ignore
