@@ -299,9 +299,16 @@ async function runVerification() {
     assert.ok(mainActivityJava.includes('setTextZoom'), 'Mobile browser must support Page Zoom controls');
     assert.ok(mainActivityJava.includes('findAllAsync'), 'Mobile browser must support Find in Page');
     assert.ok(mainActivityJava.includes('LOAD_NO_CACHE'), 'Mobile browser must support RAM-only Ghost Mode tabs');
-    assert.ok(mainActivityJava.includes('loadSecurityAuditIntoWebView'), 'Mobile browser must include live 18-point Security Audit (browz://security)');
+    assert.ok(mainActivityJava.includes('loadSecurityAuditIntoWebView'), 'Mobile browser must include the in-app privacy checks page (browz://security)');
     assert.ok(mainActivityJava.includes('loadTestbenchIntoWebView'), 'Mobile browser must include built-in Mobile API Testbench (browz://testbench)');
-    assert.ok(mainActivityJava.includes('169.254.169.254'), 'Mobile shouldInterceptRequest must block cloud metadata SSRF');
+    assert.ok(mainActivityJava.includes('isBlockedLocalHost(host)'),
+      'Mobile shouldInterceptRequest must block local, loopback and metadata targets');
+    const localHostFn = mainActivityJava.slice(mainActivityJava.indexOf('private static boolean isBlockedLocalHost'),
+      mainActivityJava.indexOf('private static int[] ipv4Octets'));
+    assert.ok(localHostFn.includes('169') && localHostFn.includes('254'),
+      'the local-host guard must cover the 169.254 link-local/metadata range');
+    assert.ok(localHostFn.includes('127'), 'the local-host guard must cover loopback');
+    assert.ok(localHostFn.includes('localhost'), 'the local-host guard must cover localhost aliases');
     assert.ok(mainActivityJava.includes('a[target=\\"_blank\\"]'), 'Mobile browser must rewrite target=_blank links for WebView compatibility');
     console.log('✓ 13. End-to-End Mobile Browser Compatibility (Retries, Bookmarks, Zoom, Find, Ghost Tab, Bridge Lockdown & 18-Point Mobile Audit) verified');
 
