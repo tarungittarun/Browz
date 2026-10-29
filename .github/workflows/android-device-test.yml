@@ -37,9 +37,10 @@ jobs:
           api-level: 34
           arch: x86_64
           script: |
-            set -o pipefail
-            gradle connectedDebugAndroidTest -p android --no-daemon 2>&1 | tee /tmp/device.log
-            STATUS=${PIPESTATUS[0]}
+            set +e
+            gradle connectedDebugAndroidTest -p android --no-daemon > /tmp/device.log 2>&1
+            STATUS=$?
+            tail -n 40 /tmp/device.log
             if [ "$STATUS" -ne 0 ]; then
               grep -E "FAILED|Failure|junit|AssertionError|expected|Exception" /tmp/device.log | head -n 25 | tr -d '\r' | while IFS= read -r line; do
                 echo "::error title=device-test::$line"

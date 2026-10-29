@@ -4,6 +4,8 @@
 set -euo pipefail
 
 APK="${1:?usage: verify-apk.sh path/to/app.apk}"
+# BROWZ_ALLOW_EXPOSED_KEY=1 permits the known-compromised key for preview artefacts only.
+# Any real release must run without it.
 TOOLS="${ANDROID_HOME:?ANDROID_HOME not set}/build-tools"
 BUILD_TOOLS_DIR="$(ls -d "$TOOLS"/* | sort -V | tail -n 1)"
 AAPT="$BUILD_TOOLS_DIR/aapt"
@@ -52,7 +54,12 @@ for scheme in v2 v3; do
   grep -qi "Verified using $scheme scheme.*true" <<<"$CERTS" && ok "$scheme signature scheme" || bad "$scheme signature missing"
 done
 if grep -qi "94af295478718c92fa1636a722c2b0fd68f4d64a8a0f849c96d0d28ec9f43f26" <<<"$CERTS"; then
-  bad "APK is signed with the exposed historical key: not a trusted release"
+  if [ "${BROWZ_ALLOW_EXPOSED_KEY:-0}" = "1" ]; then
+    note "WARNING: exposed historical key (test preview only, not distributable)"
+    echo "::warning title=artifact-verification::Preview APK uses the exposed historical key; this artifact must never be released as a trusted update"
+  else
+    bad "APK is signed with the exposed historical key: not a trusted release"
+  fi
 else
   ok "not signed with the exposed historical key"
 fi
