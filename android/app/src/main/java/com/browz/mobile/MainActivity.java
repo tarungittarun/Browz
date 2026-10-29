@@ -1613,22 +1613,22 @@ public class MainActivity extends Activity {
         if (d.isEmpty()) return "";
         int schemeEnd = d.indexOf("://");
         if (schemeEnd >= 0) d = d.substring(schemeEnd + 3);
-        // Reject anything still carrying a scheme-like prefix (javascript:, data:, etc.)
-        if (d.matches("^[a-z][a-z0-9+.-]*:.*") && !d.matches("^[0-9a-f:.]+:.*")) {
-            int colon = d.indexOf(':');
-            String maybeHost = colon > 0 ? d.substring(0, colon) : "";
-            if (!maybeHost.contains(".")) return "";
-        }
+        // Credentials are removed first so "user:pass@host" is not mistaken for a scheme.
         int at = d.lastIndexOf('@');
-        if (at >= 0) d = d.substring(at + 1);          // drop any userinfo
+        if (at >= 0) d = d.substring(at + 1);
+        int colon = d.indexOf(':');
+        if (colon >= 0) {
+            String beforeColon = d.substring(0, colon);
+            // A "scheme:" prefix that is not a hostname means this is not a domain rule.
+            if (d.matches("^[a-z][a-z0-9+.-]*:.*") && !beforeColon.contains(".")) return "";
+            d = beforeColon;
+        }
         int cut = d.length();
         for (char c : new char[]{'/', '?', '#'}) {
             int i = d.indexOf(c);
             if (i >= 0 && i < cut) cut = i;
         }
         d = d.substring(0, cut);
-        int colon = d.indexOf(':');
-        if (colon >= 0) d = d.substring(0, colon);     // drop any port
         if (d.endsWith(".")) d = d.substring(0, d.length() - 1);
         if (d.isEmpty() || d.length() > 253) return "";
         // Only hostname characters survive: no spaces, credentials, paths or scripts.
