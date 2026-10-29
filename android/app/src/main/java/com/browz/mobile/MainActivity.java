@@ -1598,6 +1598,11 @@ public class MainActivity extends Activity {
 
     private void loadHomeIntoWebView(WebView wv) {
         Persona p = personas.get(activePersonaIdx);
+        String versionLabel = "Browz";
+        try {
+            String vn = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            versionLabel = "Browz " + (vn == null ? "" : vn);
+        } catch (Exception ignored) { }
         String modeLabel = (activeTab != null && activeTab.ghostMode)
             ? "Low-cache tab · site data shared with other tabs"
             : "Mobile browsing · privacy controls available";
@@ -1623,7 +1628,7 @@ public class MainActivity extends Activity {
             ".btn{flex:1;background:#222228;color:#f4f4f5;border:1px solid #3f3f4a;border-radius:8px;padding:9px;font-size:11.5px;font-weight:600;text-align:center;cursor:pointer}" +
             "</style></head><body>" +
             "<div class='center'>" +
-            "<h1>Browz</h1>" +
+            "<h1>" + versionLabel + "</h1>" +
             "<div class='sub'><span class='dot'></span><span>" + modeLabel + "</span></div>" +
             "<form class='sbox' onsubmit='doSearch(event)'>" +
             "<input id='q' type='text' placeholder='Search privately or enter web address...' autocomplete='off'/>" +
@@ -1665,7 +1670,7 @@ public class MainActivity extends Activity {
     private void showBrowserMenu() {
         String[] items = {"New tab", "Bookmarks", "Find, zoom and video", "Privacy controls",
             "Request log", "Share page", "Clear browsing data", "Privacy and limitations"};
-        new AlertDialog.Builder(this).setTitle("Browz")
+        new AlertDialog.Builder(this).setTitle("Browz " + getVersionName())
             .setItems(items, (dialog, which) -> {
                 switch (which) {
                     case 0: createAndSwitchTab("browz://home", false); break;
@@ -1678,6 +1683,14 @@ public class MainActivity extends Activity {
                     case 7: showPrivacyInfo(); break;
                 }
             }).setNegativeButton("Close", null).show();
+    }
+
+    private String getVersionName() {
+        try {
+            String vn = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+            if (vn != null) return vn;
+        } catch (Exception ignored) { }
+        return "";
     }
 
     private void showBookmarksDialog() {

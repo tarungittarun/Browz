@@ -15,5 +15,12 @@ assert.ok(java.includes('not Tor or a VPN'));
 assert.ok(java.includes('removeJavascriptInterface("BrowzNative")'));
 assert.ok(java.includes('"GET".equalsIgnoreCase(request.getMethod())'));
 assert.ok(manifest.includes('android:name="android.webkit.WebView.EnableSafeBrowsing"\n            android:value="true"'));
-assert.ok(!fs.readFileSync('.github/workflows/build-android-apk.yml', 'utf8').includes('gh release upload'));
+const apkWorkflow = fs.readFileSync('.github/workflows/build-android-apk.yml', 'utf8');
+// The only allowed release upload target is a draft, maintainer-only release.
+const releaseLines = apkWorkflow.split('\n').filter((line) => line.includes('gh release upload'));
+assert.deepEqual(releaseLines.map((line) => line.trim()),
+  ['gh release upload v1.0.3-preview Browz-Mobile-1.0.3-preview.apk --clobber']);
+assert.ok(apkWorkflow.includes('gh release create v1.0.3-preview --draft'));
+assert.ok(!apkWorkflow.includes('releases/download/v1.0.0'), 'must not republish the public release');
+assert.ok(java.includes('getVersionName()'));
 console.log('Mobile static regressions passed (not an Android device test).');

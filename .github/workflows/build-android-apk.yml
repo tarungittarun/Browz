@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-android-apk:
@@ -35,35 +35,86 @@ jobs:
         with:
           gradle-version: "8.7"
 
-      - name: Compile & Sign Browz Mobile APK
+      - name: Build APK (signed with the historical test key)
         run: |
           gradle assembleRelease -p android --no-daemon
-          cp android/app/build/outputs/apk/release/app-release.apk Browz-Mobile-1.0.3-test.apk
-          ls -lh Browz-Mobile-1.0.3-test.apk
+          cp android/app/build/outputs/apk/release/app-release.apk Browz-Mobile-1.0.3-preview.apk
+          ls -lh Browz-Mobile-1.0.3-preview.apk
 
-      - name: Verify Signed APK Binary, Pinned Keystore Fingerprint & Permissions (apksigner + aapt)
+      - name: Verify preview APK signature and permissions
         run: |
           BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
-          echo "Using Android Build Tools: $BUILD_TOOLS_DIR"
-          CERTS=$("$BUILD_TOOLS_DIR/apksigner" verify --verbose --print-certs Browz-Mobile-1.0.3-test.apk)
+          CERTS=$("$BUILD_TOOLS_DIR/apksigner" verify --verbose --print-certs Browz-Mobile-1.0.3-preview.apk)
           echo "$CERTS"
           if ! echo "$CERTS" | grep -qi "94af295478718c92fa1636a722c2b0fd68f4d64a8a0f849c96d0d28ec9f43f26"; then
-            echo "ERROR: APK signing certificate SHA-256 does not match pinned browz-release.p12!"
+            echo "ERROR: preview APK was not built with the expected historical key."
             exit 1
           fi
-          PERMS=$("$BUILD_TOOLS_DIR/aapt" dump permissions Browz-Mobile-1.0.3-test.apk)
+          PERMS=$("$BUILD_TOOLS_DIR/aapt" dump permissions Browz-Mobile-1.0.3-preview.apk)
           echo "$PERMS"
           if echo "$PERMS" | grep -E "ACCESS_FINE_LOCATION|CAMERA|RECORD_AUDIO|READ_CONTACTS"; then
             echo "ERROR: Forbidden tracking permission detected in APK!"
             exit 1
           fi
-          echo "APK pinned cryptographic signature and zero-telemetry permission audit passed!"
 
-      # Do not publish automatically: the historical release key is exposed in the repository.
-      # An artifact is for testing, not a trusted production release.
+      # Signs a second APK with a key that only the repository owner holds.
+      # One-time setup is documented in docs/SIGNING.md; without those secrets
+      # this step does nothing and only the preview APK is produced.
+      - name: Re-sign APK with owner-held key when configured
+        env:
+          KEYSTORE_B64: ${{ secrets.BROWZ_ANDROID_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.BROWZ_ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.BROWZ_ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.BROWZ_ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "No owner keystore configured; skipping owner-signed build."
+            exit 0
+          fi
+          BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
+          umask 077
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/browz-owner.p12"
+          cp Browz-Mobile-1.0.3-preview.apk Browz-Mobile-1.0.3.apk
+          zip -q -d Browz-Mobile-1.0.3.apk "META-INF/*.SF" "META-INF/*.RSA" "META-INF/*.DSA" "META-INF/*.EC" || true
+          "$BUILD_TOOLS_DIR/zipalign" -f 4 Browz-Mobile-1.0.3.apk "$RUNNER_TEMP/browz-aligned.apk"
+          "$BUILD_TOOLS_DIR/apksigner" sign \
+            --ks "$RUNNER_TEMP/browz-owner.p12" \
+            --ks-pass "env:STORE_PASS" \
+            --ks-key-alias "$KEY_ALIAS" \
+            --key-pass "env:KEY_PASS" \
+            --out Browz-Mobile-1.0.3.apk "$RUNNER_TEMP/browz-aligned.apk"
+          rm -f "$RUNNER_TEMP/browz-owner.p12" "$RUNNER_TEMP/browz-aligned.apk"
+          CERTS=$("$BUILD_TOOLS_DIR/apksigner" verify --verbose --print-certs Browz-Mobile-1.0.3.apk)
+          echo "$CERTS"
+          if echo "$CERTS" | grep -qi "94af295478718c92fa1636a722c2b0fd68f4d64a8a0f849c96d0d28ec9f43f26"; then
+            echo "ERROR: the owner key must not be the exposed historical key."
+            exit 1
+          fi
+          echo "SHA256 (APK): $(sha256sum Browz-Mobile-1.0.3.apk | cut -d' ' -f1)"
 
-      - name: Upload Android APK Artifact
+      # Draft releases are visible only to repository maintainers, so the APK is
+      # not downloadable by the public while the repository itself is public.
+      - name: Attach preview APK to a draft release
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view v1.0.3-preview >/dev/null 2>&1 || \
+            gh release create v1.0.3-preview --draft \
+              --title "Browz Mobile 1.0.3 preview (draft)" \
+              --notes "Unreleased Android preview signed with the historical exposed test key. Do not treat as a trusted security update."
+          gh release upload v1.0.3-preview Browz-Mobile-1.0.3-preview.apk --clobber
+          gh release view v1.0.3-preview --json assets --jq '.assets[].name'
+
+      - name: Upload preview APK (historical test key)
         uses: actions/upload-artifact@v4
         with:
-          name: Browz-Mobile-1.0.3-test-APK
-          path: Browz-Mobile-1.0.3-test.apk
+          name: Browz-Mobile-1.0.3-preview-APK
+          path: Browz-Mobile-1.0.3-preview.apk
+
+      - name: Upload owner-signed APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Browz-Mobile-1.0.3-signed-APK
+          path: Browz-Mobile-1.0.3.apk
+          if-no-files-found: ignore
