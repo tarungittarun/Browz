@@ -54,6 +54,7 @@ jobs:
             head -n 20 | tr -d '\r' | while IFS= read -r line; do
               echo "::error title=device-test::$line"
             done
+          if [ "$STATUS" = "0" ]; then exit 0; fi
           # A failed suite is easier to diagnose from a branch than from a blocked artifact store.
           WORK=$(mktemp -d)
           cp device-test.log "$WORK/" 2>/dev/null || true
@@ -64,7 +65,7 @@ jobs:
           git add -A
           git -c user.name=browz-ci -c user.email=browz-ci@users.noreply.github.com commit -q -m "device test report ${{ github.sha }}"
           git push --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" device-test-report
-          if [ "$STATUS" != "0" ]; then exit 1; fi
+          exit 1
 
       - name: Upload test results
         if: always()
