@@ -24,6 +24,12 @@ android {
             keyAlias "browzkey"
             keyPassword "browzstealth2026"
             storeType "PKCS12"
+            // v3 carries signing-key lineage metadata, which is required to rotate
+            // away from a compromised key; v4 is intentionally off (no idsig needed).
+            enableV1Signing true
+            enableV2Signing true
+            enableV3Signing true
+            enableV4Signing false
         }
     }
 
