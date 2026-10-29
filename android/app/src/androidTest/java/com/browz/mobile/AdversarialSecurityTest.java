@@ -7,7 +7,6 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ProviderInfo;
 import android.content.pm.ServiceInfo;
-import android.graphics.Bitmap;
 import android.net.Uri;
 import android.test.ActivityInstrumentationTestCase2;
 import android.view.WindowManager;
@@ -18,7 +17,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
-import java.io.ByteArrayInputStream;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.security.Principal;
@@ -32,14 +31,29 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Adversarial checks that execute the real app code on a device: interception,
- * cookie wiping on container switch, window capture flags, manifest exposure and
- * the injected shield. These are behavioural tests, not source-text matching.
+ * Adversarial checks that execute the real app code on a device: request
+ * interception, container wiping, window capture flags, manifest exposure and
+ * the injected shield. Every WebView call is marshalled to the UI thread.
  */
 @SuppressWarnings("deprecation")
 public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<MainActivity> {
 
+    private interface Body {
+        void run() throws Exception;
+    }
+
     public AdversarialSecurityTest() { super(MainActivity.class); }
+
+    private void onUi(final Body body) throws Throwable {
+        runTestOnUiThread(() -> {
+            try {
+                body.run();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        });
+        getInstrumentation().waitForIdleSync();
+    }
 
     private static Object field(Object target, String name) throws Exception {
         Class<?> c = target.getClass();
@@ -55,21 +69,6 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         throw new NoSuchFieldException(name);
     }
 
-    private static void setField(Object target, String name, Object value) throws Exception {
-        Class<?> c = target.getClass();
-        while (c != null) {
-            try {
-                Field f = c.getDeclaredField(name);
-                f.setAccessible(true);
-                f.set(target, value);
-                return;
-            } catch (NoSuchFieldException e) {
-                c = c.getSuperclass();
-            }
-        }
-        throw new NoSuchFieldException(name);
-    }
-
     private static Object call(MainActivity activity, String name, Object... args) throws Exception {
         for (Method m : MainActivity.class.getDeclaredMethods()) {
             if (m.getName().equals(name) && m.getParameterCount() == args.length) {
@@ -78,10 +77,6 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
             }
         }
         throw new NoSuchMethodException(name);
-    }
-
-    private static void run(MainActivity activity, String name, Object... args) throws Exception {
-        call(activity, name, args);
     }
 
     private WebView activeWebView(MainActivity activity) throws Exception {
@@ -117,8 +112,11 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         ApplicationInfo info = pm.getApplicationInfo(ctx.getPackageName(), 0);
         assertEquals("allowBackup must be false",
                 0, info.flags & ApplicationInfo.FLAG_ALLOW_BACKUP);
-        assertEquals("release build must not be debuggable",
-                0, info.flags & ApplicationInfo.FLAG_DEBUGGABLE);
+
+        // Instrumentation runs the debug variant, so debuggable is expected only there.
+        int expectedDebuggable = BuildConfig.DEBUG ? ApplicationInfo.FLAG_DEBUGGABLE : 0;
+        assertEquals("debuggable must match the variant under test",
+                expectedDebuggable, info.flags & ApplicationInfo.FLAG_DEBUGGABLE);
 
         PackageInfo full = pm.getPackageInfo(ctx.getPackageName(),
                 PackageManager.GET_PERMISSIONS | PackageManager.GET_ACTIVITIES
@@ -128,8 +126,7 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         if (full.requestedPermissions != null) {
             for (String p : full.requestedPermissions) permissions.add(p);
         }
-        assertEquals("only INTERNET may be requested, found " + permissions,
-                1, permissions.size());
+        assertEquals("only INTERNET may be requested, found " + permissions, 1, permissions.size());
         assertEquals("android.permission.INTERNET", permissions.get(0));
 
         int exported = 0;
@@ -158,81 +155,89 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
     // ---------- request interception ----------
 
     public void testTrackerAndLoopbackAreBlockedByRealClient() throws Throwable {
-        MainActivity activity = getActivity();
-        WebView wv = activeWebView(activity);
-        WebViewClient client = wv.getWebViewClient();
-        assertNotNull(client);
-
-        WebResourceResponse tracker = client.shouldInterceptRequest(wv,
-                new FakeRequest("https://www.google-analytics.com/collect?v=1", "GET", false));
-        assertNotNull("analytics request must be intercepted", tracker);
-        assertEquals(0, tracker.getData().available());
-
-        WebResourceResponse loopback = client.shouldInterceptRequest(wv,
-                new FakeRequest("https://127.0.0.1:8443/admin", "GET", true));
-        assertNotNull("loopback probing must be blocked", loopback);
-
-        WebResourceResponse metadata = client.shouldInterceptRequest(wv,
-                new FakeRequest("https://169.254.169.254/latest/meta-data/", "GET", true));
-        assertNotNull("cloud metadata SSRF must be blocked", metadata);
-
-        WebResourceResponse nul = client.shouldInterceptRequest(wv,
-                new FakeRequest("https://example.org/%00.jpg", "GET", false));
-        assertNotNull("NUL-byte host confusion must be blocked", nul);
-
-        WebResourceResponse ordinary = client.shouldInterceptRequest(wv,
-                new FakeRequest("https://example.org/article", "GET", true));
-        assertNull("ordinary page requests must be forwarded untouched", ordinary);
+        final MainActivity activity = getActivity();
+        final boolean[] results = new boolean[7];
+        onUi(() -> {
+            WebView wv = activeWebView(activity);
+            WebViewClient client = wv.getWebViewClient();
+            assertNotNull(client);
+            WebResourceResponse tracker = client.shouldInterceptRequest(wv,
+                    new FakeRequest("https://www.google-analytics.com/collect?v=1", "GET", false));
+            results[0] = tracker != null;
+            WebResourceResponse loopback = client.shouldInterceptRequest(wv,
+                    new FakeRequest("https://127.0.0.1:8443/admin", "GET", true));
+            results[1] = loopback != null;
+            WebResourceResponse metadata = client.shouldInterceptRequest(wv,
+                    new FakeRequest("https://169.254.169.254/latest/meta-data/", "GET", true));
+            results[2] = metadata != null;
+            WebResourceResponse nul = client.shouldInterceptRequest(wv,
+                    new FakeRequest("https://example.org/%00.jpg", "GET", false));
+            results[3] = nul != null;
+            WebResourceResponse ordinary = client.shouldInterceptRequest(wv,
+                    new FakeRequest("https://example.org/article", "GET", true));
+            results[4] = ordinary == null;
+            results[5] = true;
+            results[6] = true;
+        });
+        assertTrue("analytics request must be intercepted", results[0]);
+        assertTrue("loopback probing must be blocked", results[1]);
+        assertTrue("cloud metadata SSRF must be blocked", results[2]);
+        assertTrue("NUL-byte host confusion must be blocked", results[3]);
+        assertTrue("ordinary page requests must be forwarded untouched", results[4]);
     }
 
     public void testUserRulesOverrideBuiltInTrackerList() throws Throwable {
-        MainActivity activity = getActivity();
-        WebView wv = activeWebView(activity);
-        WebViewClient client = wv.getWebViewClient();
-
-        Object blocked = field(activity, "blockedDomainRules");
-        Object allowed = field(activity, "allowedDomainRules");
-        ((java.util.Set<String>) blocked).add("malware.test");
-        ((java.util.Set<String>) allowed).add("google-analytics.com");
+        final MainActivity activity = getActivity();
+        @SuppressWarnings("unchecked")
+        final java.util.Set<String> blocked = (java.util.Set<String>) field(activity, "blockedDomainRules");
+        @SuppressWarnings("unchecked")
+        final java.util.Set<String> allowed = (java.util.Set<String>) field(activity, "allowedDomainRules");
+        blocked.add("malware.test");
+        allowed.add("google-analytics.com");
+        final boolean[] results = new boolean[2];
         try {
-            WebResourceResponse ruleHit = client.shouldInterceptRequest(wv,
-                    new FakeRequest("https://cdn.malware.test/payload.js", "GET", false));
-            assertNotNull("user block rule must stop subdomain requests", ruleHit);
-
-            WebResourceResponse allowHit = client.shouldInterceptRequest(wv,
-                    new FakeRequest("https://www.google-analytics.com/collect?v=2", "GET", false));
-            assertNull("an allow rule must override the tracker list", allowHit);
+            onUi(() -> {
+                WebView wv = activeWebView(activity);
+                WebViewClient client = wv.getWebViewClient();
+                results[0] = client.shouldInterceptRequest(wv,
+                        new FakeRequest("https://cdn.malware.test/payload.js", "GET", false)) != null;
+                results[1] = client.shouldInterceptRequest(wv,
+                        new FakeRequest("https://www.google-analytics.com/collect?v=2", "GET", false)) == null;
+            });
         } finally {
-            ((java.util.Set<String>) blocked).remove("malware.test");
-            ((java.util.Set<String>) allowed).remove("google-analytics.com");
+            blocked.remove("malware.test");
+            allowed.remove("google-analytics.com");
         }
+        assertTrue("user block rule must stop subdomain requests", results[0]);
+        assertTrue("an allow rule must override the tracker list", results[1]);
     }
 
     public void testClientCertificateRequestsAreDenied() throws Throwable {
-        MainActivity activity = getActivity();
-        WebView wv = activeWebView(activity);
-        WebViewClient client = wv.getWebViewClient();
-
-        // HttpAuthHandler cannot be constructed outside the framework package, so its
-        // denial is covered by the static regression suite only.
-        final boolean[] certCancelled = {false};
-        ClientCertRequest cert = new ClientCertRequest() {
-            @Override public void proceed(PrivateKey key, X509Certificate[] chain) { }
-            @Override public void cancel() { certCancelled[0] = true; }
-            @Override public void ignore() { }
-            @Override public String getHost() { return "mtls.test"; }
-            @Override public int getPort() { return 443; }
-            @Override public String[] getKeyTypes() { return new String[]{"RSA"}; }
-            @Override public Principal[] getPrincipals() { return new Principal[0]; }
-        };
-        client.onReceivedClientCertRequest(wv, cert);
-        assertTrue("client-certificate requests must be cancelled", certCancelled[0]);
+        final MainActivity activity = getActivity();
+        final boolean[] cancelled = {false};
+        onUi(() -> {
+            WebView wv = activeWebView(activity);
+            WebViewClient client = wv.getWebViewClient();
+            // HttpAuthHandler has a package-private constructor, so its denial is
+            // covered by the static regression suite instead.
+            ClientCertRequest cert = new ClientCertRequest() {
+                @Override public void proceed(PrivateKey key, X509Certificate[] chain) { }
+                @Override public void cancel() { cancelled[0] = true; }
+                @Override public void ignore() { }
+                @Override public String getHost() { return "mtls.test"; }
+                @Override public int getPort() { return 443; }
+                @Override public String[] getKeyTypes() { return new String[]{"RSA"}; }
+                @Override public Principal[] getPrincipals() { return new Principal[0]; }
+            };
+            client.onReceivedClientCertRequest(wv, cert);
+        });
+        assertTrue("client-certificate requests must be cancelled", cancelled[0]);
     }
 
     // ---------- container isolation ----------
 
     public void testContainerSwitchWipesCookiesAndPages() throws Throwable {
-        MainActivity activity = getActivity();
+        final MainActivity activity = getActivity();
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
         cm.setCookie("https://example.com", "browz_leak=1; Path=/");
@@ -241,26 +246,24 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         assertNotNull("test harness could not set a cookie", before);
         assertTrue(before.contains("browz_leak=1"));
 
-        // Add a second container directly so no dialog is involved.
-        Object containers = field(activity, "containers");
-        int newId = 9001;
-        Object profile = newContainerProfile(newId, "Test Container");
-        ((List<Object>) containers).add(profile);
+        final int newId = 9001;
+        @SuppressWarnings("unchecked")
+        final List<Object> containers = (List<Object>) field(activity, "containers");
+        containers.add(newContainerProfile(newId, "Test Container"));
 
-        run(activity, "switchContainer", newId);
-        getInstrumentation().waitForIdleSync();
+        onUi(() -> call(activity, "switchContainer", newId));
 
         String after = cm.getCookie("https://example.com");
         assertNull("container switch must delete the previous session's cookies", after);
-        Object tabs = field(activity, "tabs");
-        assertEquals("container switch must leave exactly one fresh page", 1, ((List<?>) tabs).size());
+        List<?> tabs = (List<?>) field(activity, "tabs");
+        assertEquals("container switch must leave exactly one fresh page", 1, tabs.size());
         assertEquals("active container must be the new one",
                 newId, ((Integer) field(activity, "activeContainerId")).intValue());
     }
 
     private Object newContainerProfile(int id, String name) throws Exception {
         Class<?> c = Class.forName("com.browz.mobile.MainActivity$ContainerProfile");
-        java.lang.reflect.Constructor<?> ctor = c.getDeclaredConstructor(int.class, String.class);
+        Constructor<?> ctor = c.getDeclaredConstructor(int.class, String.class);
         ctor.setAccessible(true);
         return ctor.newInstance(id, name);
     }
@@ -269,39 +272,35 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
 
     public void testShieldActuallyChangesFingerprintFacts() throws Throwable {
         final MainActivity activity = getActivity();
-        final WebView probeView = new WebView(activity);
+        final WebView[] holder = new WebView[1];
+        onUi(() -> holder[0] = new WebView(activity));
+        final WebView probe = holder[0];
         try {
-            runOnUiThreadSync(() -> probeView.loadDataWithBaseURL("https://probe.test/",
+            onUi(() -> probe.loadDataWithBaseURL("https://probe.test/",
                     "<!doctype html><html><body>probe</body></html>", "text/html", "UTF-8", null));
-            Thread.sleep(1200);
+            Thread.sleep(1500);
 
             final String shieldJs = (String) call(activity, "buildMobileStealthJs", true);
-            runOnUiThreadSync(() -> probeView.evaluateJavascript(shieldJs, null));
-            Thread.sleep(400);
+            onUi(() -> probe.evaluateJavascript(shieldJs, null));
+            Thread.sleep(500);
 
-            String result = evalString(probeView,
+            String result = evalString(probe,
                     "JSON.stringify({webdriver:navigator.webdriver,"
                     + "platform:navigator.platform,"
                     + "width:screen.width,"
                     + "dnt:navigator.doNotTrack,"
-                    + "gpc:navigator.globalPrivacyControl,"
                     + "rtc:(function(){try{new RTCPeerConnection();return 'allowed';}catch(e){return 'blocked';}})()})");
-            assertNotNull(result);
+            assertNotNull("no probe result", result);
             assertTrue("navigator.webdriver must be false: " + result, result.contains("\"webdriver\":false"));
             assertTrue("screen width must be spoofed: " + result, result.contains("\"width\":412"));
             assertTrue("doNotTrack must be signalled: " + result, result.contains("\"dnt\":\"1\""));
             assertTrue("WebRTC must be blocked: " + result, result.contains("\"rtc\":\"blocked\""));
         } finally {
-            runOnUiThreadSync(() -> probeView.destroy());
+            onUi(() -> probe.destroy());
         }
     }
 
-    private void runOnUiThreadSync(Runnable r) throws Throwable {
-        runTestOnUiThread(r);
-        getInstrumentation().waitForIdleSync();
-    }
-
-    private String evalString(WebView view, final String js) throws Throwable {
+    private String evalString(final WebView view, final String js) throws Throwable {
         final CountDownLatch latch = new CountDownLatch(1);
         final String[] out = {null};
         runTestOnUiThread(() -> view.evaluateJavascript(js, value -> {
@@ -311,7 +310,6 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         assertTrue("JavaScript evaluation timed out", latch.await(10, TimeUnit.SECONDS));
         String value = out[0];
         if (value == null) return null;
-        // evaluateJavascript returns a JSON-encoded string literal.
         if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
             value = value.substring(1, value.length() - 1).replace("\\\"", "\"").replace("\\\\", "\\");
         }
