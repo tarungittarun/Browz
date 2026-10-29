@@ -1,0 +1,129 @@
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_LEFT,TA_CENTER
+from reportlab.lib.styles import getSampleStyleSheet,ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.lib.pagesizes import A4
+from reportlab.platypus import SimpleDocTemplate,Paragraph,Spacer,PageBreak,Table,TableStyle,Image,KeepTogether,HRFlowable
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.lib.utils import ImageReader
+import os,html
+root=os.path.dirname(os.path.dirname(os.path.abspath(__file__))); out=root+'/Browz-User-Guide.pdf'; imgs=root+'/docs/images'
+for name,path in [('DejaVu','/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'),('DejaVu-Bold','/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf')]:
+ pdfmetrics.registerFont(TTFont(name,path))
+pdfmetrics.registerFontFamily('DejaVu',normal='DejaVu',bold='DejaVu-Bold',italic='DejaVu',boldItalic='DejaVu-Bold')
+style=getSampleStyleSheet()
+style.add(ParagraphStyle(name='GuideTitle',fontName='DejaVu-Bold',fontSize=28,leading=34,textColor=colors.HexColor('#10213b'),spaceAfter=12))
+style.add(ParagraphStyle(name='GuideSub',fontName='DejaVu',fontSize=12,leading=18,textColor=colors.HexColor('#40546d'),spaceAfter=10))
+style.add(ParagraphStyle(name='H1g',fontName='DejaVu-Bold',fontSize=17,leading=22,textColor=colors.HexColor('#10213b'),spaceBefore=4,spaceAfter=9))
+style.add(ParagraphStyle(name='H2g',fontName='DejaVu-Bold',fontSize=11,leading=15,textColor=colors.HexColor('#17617b'),spaceBefore=8,spaceAfter=4))
+style.add(ParagraphStyle(name='Bodyg',fontName='DejaVu',fontSize=9,leading=14,spaceAfter=6,textColor=colors.HexColor('#202b39')))
+style.add(ParagraphStyle(name='Smallg',fontName='DejaVu',fontSize=7.7,leading=11,textColor=colors.HexColor('#536377'),spaceAfter=5))
+style.add(ParagraphStyle(name='Warn',fontName='DejaVu',fontSize=9,leading=14,textColor=colors.HexColor('#582c04'),spaceAfter=0))
+style.add(ParagraphStyle(name='Cellg',fontName='DejaVu',fontSize=8.2,leading=12,textColor=colors.HexColor('#253344')))
+style.add(ParagraphStyle(name='Cellhead',fontName='DejaVu-Bold',fontSize=8.2,leading=12,textColor=colors.white))
+story=[]
+def p(t,sty='Bodyg'): story.append(Paragraph(t,style[sty]))
+def h(t): p(t,'H1g')
+def sub(t): p(t,'H2g')
+def steps(*lines):
+ for i,line in enumerate(lines,1): p(f'<b>{i}.</b> {line}')
+def bullets(*lines):
+ for line in lines:p('• '+line)
+def box(text):
+ t=Table([[Paragraph(text,style['Warn'])]],colWidths=[172*mm]);t.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),colors.HexColor('#fff3db')),('BOX',(0,0),(-1,-1),.6,colors.HexColor('#d6a143')),('LEFTPADDING',(0,0),(-1,-1),9),('RIGHTPADDING',(0,0),(-1,-1),9),('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8)]));story.append(t);story.append(Spacer(1,8))
+def table(rows,widths):
+ data=[[Paragraph(x, style['Cellhead'] if idx==0 else style['Cellg']) for x in row] for idx,row in enumerate(rows)]
+ t=Table(data,colWidths=[x*mm for x in widths],repeatRows=1,hAlign='LEFT');t.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,0),colors.HexColor('#243e5a')),('ROWBACKGROUNDS',(0,1),(-1,-1),[colors.HexColor('#f3f6f9'),colors.white]),('VALIGN',(0,0),(-1,-1),'TOP'),('GRID',(0,0),(-1,-1),.25,colors.HexColor('#d7e0e8')),('TOPPADDING',(0,0),(-1,-1),6),('BOTTOMPADDING',(0,0),(-1,-1),6)]));story.append(t);story.append(Spacer(1,8))
+def screenshot(filename,maxw,maxh,caption):
+ path=os.path.join(imgs,filename)
+ if os.path.isfile(path):
+  iw,ih=ImageReader(path).getSize(); scale=min(maxw*mm/iw,maxh*mm/ih); img=Image(path,width=iw*scale,height=ih*scale);img.hAlign='CENTER';story.append(img);story.append(Spacer(1,4));p(caption,'Smallg')
+ else:
+  box('Screenshot not available in this environment. The instructions below describe the interface; exact placement can vary.')
+def new(): story.append(PageBreak())
+def link(url,label):return '<link href="%s" color="#17617b"><u>%s</u></link>'%(url,label)
+win='https://github.com/tarungittarun/Browz/releases/download/v1.0.0/Browz-Standalone-Installer-1.0.0.exe'
+apk='https://github.com/tarungittarun/Browz/releases/download/v1.0.0/Browz-Mobile-1.0.0.apk'
+release='https://github.com/tarungittarun/Browz/releases/tag/v1.0.0'
+p('BROWZ','GuideSub');p('User guide','GuideTitle');p('Windows desktop &amp; Android mobile','GuideSub');p('A practical guide to browsing, tabs, privacy controls and traffic tools.', 'Bodyg');story.append(Spacer(1,10))
+box('<b>Read before installing:</b> Browz is experimental. The Android signing key is compromised, so the public APK is an old, untrusted release, not a recommended security update. The newer Android interface shown in this guide has not been published as a trusted installer.')
+p('<b>Guide prepared:</b> 29 October 2026. Screenshots show a clean test environment, not your personal data.');p('Inside: downloads and versions • desktop navigation • Android navigation • tabs and bookmarks • traffic tools • privacy limits • troubleshooting.')
+sub('Start here');p('Windows: '+link(win,'Download standalone installer (.exe)'));p('Android: '+link(apk,'Historical APK (.apk) — security warning applies'));p('All published files: '+link(release,'GitHub v1.0.0 release page'));p('The Android filename says 1.0.0; the historical build was configured as app version 1.0.2. The newer 1.0.3 mobile build exists only as a test artifact, not a trusted release.','Smallg')
+new();h('1  Downloads, versions and safety')
+table([['Platform','Available download','What you should know'],['Windows 64-bit',link(win,'Standalone installer')+' (~99 MiB)','Public v1.0.0-named installer; runs Browz as a separate Electron/Chromium app, not in Edge. The installer source labels its app version 1.0.2.'],['Android 7.0+ (API 24+) ',link(apk,'Historical APK')+' (~44 KiB)','Old public build, configured as version 1.0.2. The key used to sign it is exposed. Do not treat it as a trusted security update.'],['Android latest work','Not published as a trusted APK','The 1.0.3 source has the revised UI, persistent bookmarks and more honest request logging. Screenshots and most mobile instructions in this guide refer to that build.']],[35,57,80])
+box('<b>Android update conflict:</b> the same app ID does not guarantee an update. Android also requires an accepted signing certificate. A safe replacement-key migration may require a fresh install and may erase app data. Back up any information you can safely export before removing an app.')
+p('<b>Windows installation:</b> Download the standalone EXE, open the file from Downloads, review the Windows security prompt and publisher information, then follow the installer. Choose the install folder if prompted and launch Browz. Do not bypass security warnings unless you have verified the file and understand the risk.')
+p('<b>Android installation:</b> We do not recommend installing the historical APK while its signing key is compromised. If an owner decides to test it on a non-sensitive test device, Android may ask for permission to install from the download source. Remove that permission afterward. Do not uninstall an existing installation without understanding potential data loss.')
+new();h('2  What Browz is for')
+p('Browz is an experimental browser: you can open websites, use several tabs, adjust certain privacy settings and inspect some network activity. The desktop and Android apps do not offer the same capabilities.')
+table([['Need','Windows desktop','Android'],['Browse, tabs, bookmarks','Address bar, multiple tabs, bookmark star and quick links.','Address bar, tabs and star. Persistent bookmarks and the menu are in newer 1.0.3 work, not the old APK.'],['See traffic','Traffic panel, filters, request details and export choices. Coverage is not guaranteed.','A partial request observation log in the newer build. It cannot show real response status or body for each request.'],['Separate accounts','Session/container controls are available. Verify your particular use case before relying on isolation.','WebView tabs share cookies and site storage. Low-cache / Ghost tabs do not isolate accounts.'],['Change privacy settings','Shields &amp; Settings offers privacy, network, sessions and permissions controls.','Privacy controls offer best-effort settings. Some pages may break.'],['Find / video','Find, zoom and Fit Video controls.','Find, text zoom and Fit Video are available through Tools or the newer menu.']],[37,68,67])
+box('Neither app is Tor or a VPN. Websites can see your IP, and your network operator can see traffic metadata. No option guarantees anonymity, blocks every request, or makes a device uncompromisable.')
+new();h('3  Windows: find your way around')
+screenshot('desktop-home.png',172,90,'Figure 1. Actual Electron app in a clean Linux test environment at the current source revision. The Windows installer uses the desktop interface; spacing and window decorations may differ.')
+p('<b>Top row:</b> the tab strip shows open pages. The plus button opens another tab; the container selector chooses a session for a new tab. A tab’s close control closes that tab.')
+p('<b>Second row:</b> Back, Forward, Reload and Home sit next to the address/search field. Other controls include bookmark star, zoom, Fit Video, Security Check, New Identity, Traffic and Shields &amp; Settings.')
+p('<b>Main area:</b> the large center region is the webpage. Traffic opens a bottom panel; Shields &amp; Settings opens a side panel. Close those panels when you want more room for a page.')
+sub('Open a page')
+steps('Click the address/search field or press <b>Ctrl+L</b>.','Type a website address such as <b>https://example.com</b>, or enter search words.','Press <b>Enter</b>. Use Back and Forward to move through pages, or Reload to try the current page again.')
+p('Page load failures and missing features can occur due to site restrictions, settings, network errors or browser compatibility.','Smallg')
+new();h('4  Windows: tabs and everyday tools')
+screenshot('desktop-toolbar.png',172,30,'Figure 1a. Enlarged crop of the actual desktop toolbar shown on the previous page.')
+sub('Use more than one tab')
+steps('Click <b>+</b> on the tab strip to open a tab.','Click a tab title to return to it. Use its close control to close it.','To try different sessions, choose a container in the selector before opening a new tab. Sessions and their data policies should be tested for your own workflow.')
+sub('Save, find and adjust')
+bullets('<b>Bookmark:</b> open a page and click the star near the address bar. Use the bookmarks bar to revisit saved links.','<b>Find:</b> press Ctrl+F, type a word and use the arrows to move between matches. Escape closes the find bar.','<b>Zoom:</b> use the minus and plus near the address bar; select the percentage to reset.','<b>Video:</b> use <b>Fit Video</b> on a page containing a video; press Esc to exit when supported. Results vary by website.','<b>New Identity:</b> rotates selected browser-facing settings and clears session data; you may be signed out. It does not change your network IP or create anonymity.')
+sub('Useful shortcuts')
+table([['Action','Shortcut'],['Focus address','Ctrl+L'],['Find in page','Ctrl+F'],['Reload','Ctrl+R or F5'],['Close search / exit fit, when supported','Esc']],[115,57])
+new();h('5  Windows: traffic and settings')
+sub('Inspect a request')
+steps('Click <b>Traffic</b> to open the bottom panel and browse or reload a page.','Use the search field and filters for method, type, status or tab to narrow the list. Click a row for available details.','Use <b>REC</b> to toggle recording and <b>Clear</b> to clear the visible capture. Close the panel to expand the webpage.')
+p('The panel may show timing, status, headers or bodies when those details are available. Captures can be incomplete and may contain passwords, cookies, tokens or personal URLs. Review before sharing.')
+sub('Export or replay (advanced)')
+p('In the Traffic panel, use <b>HAR</b>, <b>k6</b>, <b>JMeter</b>, <b>CSV</b> or <b>JSON</b> to export captured information. Composer / Load Burst lets you send or repeat requests. Only send requests to systems you are authorized to test; repeats can change data or overload a service.')
+sub('Privacy, sessions and permissions')
+p('Select <b>Shields &amp; Settings</b>; choose <b>Stealth</b>, <b>I/O &amp; Wi-Fi</b>, <b>Network</b>, <b>Sessions</b> or <b>Permissions</b>. Change one setting at a time and reload the page. A blocking setting may prevent login, downloads, media or a website from working.')
+box('The names of controls may sound stronger than their verified behavior. Simulated Wi-Fi/radio values are not control of your physical device; do not rely on these settings as a firewall or a guarantee of anonymity. A Security Check is illustrative, not an independent audit.')
+new();h('6  Android: revised interface (1.0.3 work)')
+screenshot('mobile-home.png',75,115,'Figure 2. Android 34 emulator, newer 1.0.3 development build. Screen protection was disabled only in the screenshot test; this is not a public release screenshot.')
+p('<b>Top:</b> menu on the left, address/search field, bookmark star and tab count. <b>Bottom:</b> Back, Forward, Home, Reload/Stop and Tabs. Touch the address field, type a search or URL and press Go on the keyboard.')
+box('<b>Public APK is different:</b> the old 1.0.2 app shows a Shield button and a separate Tools button at the top, with Traffic and New ID at the bottom. It does not have the newer menu, persistent bookmarks or truthful request-status wording described on the next pages.')
+new();h('7  Android: menu and tabs')
+screenshot('mobile-menu.png',74,105,'Figure 3. Newer 1.0.3 development build: Browser menu. Not the layout of the historical downloadable APK.')
+p('Tap the <b>menu</b> (three horizontal lines) to open: New tab, Bookmarks, Find, zoom and video, Privacy controls, Request log, Share page, Clear browsing data, and Privacy and limitations.')
+sub('Open, switch and close tabs')
+steps('Tap the number at the top or <b>Tabs</b> at the bottom.','Choose <b>+ New Tab</b>, or tap a listed tab to switch to it.','Choose <b>Close Active Tab</b> to close the current one. If it is the last tab, the app rotates identity and returns home rather than closing the window.')
+p('A <b>Low-cache tab</b> requests less caching, but shares cookies and site storage with other tabs. In the historical APK it is misleadingly called Ghost Tab (RAM); it is not an isolated private session.','Smallg')
+new();h('8  Android: bookmarks and page tools')
+screenshot('mobile-tabs.png',74,100,'Figure 4. Android emulator: newer development build tab selector. Actual labels or layout may vary by device.')
+sub('Save or remove a bookmark (newer build)')
+steps('Open a page and tap the star next to the address. A filled star means the current address is saved.','Tap Menu → <b>Bookmarks</b>, then choose an item to revisit it.','To remove it, revisit the page and tap the filled star. Bookmarks remain after app relaunch in the newer build and are not deleted by Clear browsing data.')
+p('Bookmarks are stored in app-private storage without application-level encryption and may contain sensitive addresses. The historical APK keeps bookmarks only for the session.')
+sub('Find, zoom and video')
+p('In the newer build choose Menu → <b>Find, zoom and video</b>. Use Zoom Out, 100% or Zoom In to adjust text. Type a word and select Find / Next Match / Clear. Fit Video attempts to enlarge a page video; it may not work on every site. The historical APK uses the top <b>Tools</b> button instead.')
+new();h('9  Android: sharing, privacy and traffic')
+sub('Share a page (newer build)')
+p('Open the page, then choose Menu → <b>Share page</b> and select the app or contact. The receiving app can see the shared URL; links can contain private tokens or search terms.')
+sub('Clear browsing data (newer build)')
+steps('Tap Menu → <b>Clear browsing data</b>.','Read the confirmation and tap <b>Clear</b> or <b>Cancel</b>.','Expect sign-outs: cookies, site storage, cache, history and the request log are cleared across tabs. Bookmarks are kept; remove them separately.')
+p('Cookie deletion is asynchronous; loaded pages and active requests can remain. Clearing is not guaranteed forensic erasure. The older APK does not have this menu option.','Smallg')
+sub('Privacy controls')
+p('Newer build: Menu → <b>Privacy controls</b>. Historical APK: tap <b>Shield</b>. Settings attempt to reduce selected tracking surfaces and can break sites. Use Apply &amp; Reload after changing options. Screenshot protection can be switched off; it is not absolute even when enabled. On-screen checks are illustrative, not security certification.')
+sub('Request log')
+p('Newer build: Menu → <b>Request log</b>. It lists some observed or blocked requests and can copy or clear the log. WebView does not report all requests or the corresponding response status, headers or bodies here. URLs may be sensitive.')
+box('Historical APK warning: its Traffic display can label requests “200 OK” without knowing the actual response and can suggest a HAR export. Do not rely on its status or export as evidence of real responses.')
+new();h('10  Privacy, access and troubleshooting')
+sub('Who can see your information?')
+bullets('<b>Websites and networks:</b> sites can see your IP; the network provider can observe destination metadata. HTTPS protects content in transit but does not provide anonymity.','<b>Device and apps:</b> a compromised OS, administrators, accessibility services, keyboards, malware or privileged tools may see data. Ordinary Android app sandboxing helps, but is not a guarantee against these threats.','<b>Exports and clipboard:</b> traffic files, shared links, bookmarks and copied URLs may include sensitive information. Treat them like credentials.')
+sub('When something does not work')
+table([['Problem','Try this'],['Site does not load','Check connection and URL, then Reload. Some pages need permissions or features Browz restricts. Do not disable protections for untrusted sites.'],['Video or login is broken','Try the site’s own controls; review settings one at a time and reload. Video fit and injected shields are not compatible with every site.'],['Android install/update conflict','Compare the installed and proposed signing certificates; package name alone is insufficient. Do not uninstall until you understand data loss. The exposed signing key requires migration.'],['Need separate Android accounts','Do not use low-cache/Ghost tabs for isolation. Use a browser designed and tested for separate profiles or a suitable OS profile.'],['Traffic looks incomplete','This is expected: capture is partial, especially on Android. Use independently verified network tools when accuracy is important.']],[53,119])
+new();h('11  Testing and current limitations')
+p('The newer Android app was built and ran a small number of UI tests on an Android 34 emulator. Those tests cover toolbar visibility, menu/tabs access and bookmark persistence. They do not establish real-device usability, website compatibility, security, privacy or account isolation.')
+p('Automated JavaScript checks also pass, but many inspect source code rather than behavior. Neither platform has received an independent security audit. The Windows public installer and historical Android APK do not include the latest unpublished Android changes.')
+sub('Before relying on Browz')
+bullets('Keep Android System WebView and your operating system updated.','Avoid sensitive accounts or confidential material until security issues are addressed and independently reviewed.','Check accessibility services, keyboards, device administration and trusted certificates on your device.','Use a trusted and independently verified VPN or Tor where appropriate; Browz alone does not supply either.','Watch for a securely signed Android release and migration instructions. The historical APK is not a safe signing-key update path.')
+p('Further details: '+link('https://github.com/tarungittarun/Browz/blob/arena/906ee2db-browz/MOBILE-PARITY-AND-TESTING.md','Mobile parity and testing')+' · '+link('https://github.com/tarungittarun/Browz/blob/arena/906ee2db-browz/SECURITY-AND-OS-ISOLATION.md','Device and OS privacy')+'.')
+p('Screenshots and descriptions are documentation of observed or implemented behavior, not a promise of performance or safety.','Smallg')
+def footer(canvas,doc):
+ canvas.saveState();w,h=A4;canvas.setStrokeColor(colors.HexColor('#dce4ea'));canvas.line(19*mm,17*mm,w-19*mm,17*mm);canvas.setFont('DejaVu',7.5);canvas.setFillColor(colors.HexColor('#68788a'));canvas.drawString(19*mm,12*mm,'BROWZ  •  USER GUIDE  •  29 OCT 2026');canvas.drawRightString(w-19*mm,12*mm,str(doc.page));canvas.restoreState()
+doc=SimpleDocTemplate(out,pagesize=A4,rightMargin=19*mm,leftMargin=19*mm,topMargin=18*mm,bottomMargin=23*mm,title='Browz User Guide',author='Browz');doc.build(story,onFirstPage=footer,onLaterPages=footer);print(out)
