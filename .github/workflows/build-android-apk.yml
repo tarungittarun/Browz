@@ -37,7 +37,13 @@ jobs:
 
       - name: Build APK (signed with the historical test key)
         run: |
-          gradle assembleRelease -p android --no-daemon
+          set -o pipefail
+          if ! gradle assembleRelease -p android --no-daemon 2>&1 | tee /tmp/build.log; then
+            grep -E "error:|FAILURE|Execution failed" /tmp/build.log | head -n 25 | tr -d '\r' | while IFS= read -r line; do
+              echo "::error title=javac::$line"
+            done
+            exit 1
+          fi
           cp android/app/build/outputs/apk/release/app-release.apk Browz-Mobile-1.0.3-preview.apk
           ls -lh Browz-Mobile-1.0.3-preview.apk
 
