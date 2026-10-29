@@ -34,7 +34,7 @@ jobs:
           script: |
             gradle connectedDebugAndroidTest -p android --no-daemon -Pandroid.testInstrumentationRunnerArguments.class=com.browz.mobile.GuideScreenshotsTest
             mkdir -p screenshots
-            adb pull /sdcard/Android/data/com.browz.mobile/files/guide-screenshots/. screenshots/
+            adb pull /sdcard/Pictures/BrowzGuide/. screenshots/
             ls -l screenshots
       - name: Expose test failure details
         if: failure()

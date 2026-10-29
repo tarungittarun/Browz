@@ -1,12 +1,14 @@
 package com.browz.mobile;
 
 import android.graphics.Bitmap;
+import android.content.ContentValues;
+import android.net.Uri;
+import android.provider.MediaStore;
 import android.test.ActivityInstrumentationTestCase2;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
-import java.io.File;
-import java.io.FileOutputStream;
+import java.io.OutputStream;
 
 /** Captures documentation on a clean emulator. Screen protection is disabled only in this test. */
 @SuppressWarnings("deprecation")
@@ -24,9 +26,14 @@ public class GuideScreenshotsTest extends ActivityInstrumentationTestCase2<MainA
         Thread.sleep(1500);
         Bitmap image = getInstrumentation().getUiAutomation().takeScreenshot();
         assertNotNull("Emulator screenshot", image);
-        File dir = new File(activity.getExternalFilesDir(null), "guide-screenshots");
-        assertTrue(dir.exists() || dir.mkdirs());
-        try (FileOutputStream output = new FileOutputStream(new File(dir, name + ".png"))) {
+        ContentValues values = new ContentValues();
+        values.put(MediaStore.Images.Media.DISPLAY_NAME, name + ".png");
+        values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+        values.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/BrowzGuide");
+        Uri uri = activity.getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+        assertNotNull(uri);
+        try (OutputStream output = activity.getContentResolver().openOutputStream(uri)) {
+            assertNotNull(output);
             assertTrue(image.compress(Bitmap.CompressFormat.PNG, 100, output));
         }
         image.recycle();
