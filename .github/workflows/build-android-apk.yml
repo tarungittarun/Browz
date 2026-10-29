@@ -106,6 +106,24 @@ jobs:
           gh release upload v1.0.3-preview Browz-Mobile-1.0.3-preview.apk --clobber
           gh release view v1.0.3-preview --json assets --jq '.assets[].name'
 
+      # Also publish the APK to a dedicated branch so it can be fetched without
+      # GitHub artifact storage (that service is not reachable from every network).
+      - name: Publish preview APK to apk-preview branch
+        if: github.event_name == 'push'
+        run: |
+          set -e
+          WORK=$(mktemp -d)
+          cp Browz-Mobile-1.0.3-preview.apk "$WORK/"
+          ( cd "$WORK" && sha256sum Browz-Mobile-1.0.3-preview.apk > SHA256SUMS.txt )
+          cd "$WORK"
+          git init -q
+          git checkout -q -b apk-preview
+          git add Browz-Mobile-1.0.3-preview.apk SHA256SUMS.txt
+          git -c user.name="browz-build" -c user.email="browz-build@users.noreply.github.com" \
+              commit -q -m "Browz 1.0.3 preview APK (build ${{ github.sha }})"
+          git push --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" apk-preview
+          cat SHA256SUMS.txt
+
       - name: Upload preview APK (historical test key)
         uses: actions/upload-artifact@v4
         with:
