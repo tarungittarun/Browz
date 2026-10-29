@@ -1201,6 +1201,7 @@ public class MainActivity extends Activity {
     private void startSystemDownload(String url, String userAgent, String contentDisposition, String mimeType) {
         try {
             String fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType);
+            if (fileName == null || fileName.trim().isEmpty()) fileName = "browz-download";
             fileName = fileName.replace('/', '_').replace('\\', '_');
             DownloadManager.Request req = new DownloadManager.Request(Uri.parse(url));
             req.setMimeType(mimeType);
@@ -1610,33 +1611,20 @@ public class MainActivity extends Activity {
         boolean microphone = appDeclaresPermission("android.permission.RECORD_AUDIO");
         boolean location = appDeclaresPermission("android.permission.ACCESS_FINE_LOCATION")
             || appDeclaresPermission("android.permission.ACCESS_COARSE_LOCATION");
-        sb.append("Enforced by the app itself:
-");
-        sb.append("• Camera: ").append(camera ? "permission declared - page requests are still denied" : "no permission declared, so pages cannot open it").append('
-');
-        sb.append("• Microphone: ").append(microphone ? "permission declared - page requests are still denied" : "no permission declared, so pages cannot record").append('
-');
-        sb.append("• Precise location: ").append(location ? "permission declared - page requests are still denied" : "no permission declared, so pages cannot locate you").append('
-');
-        sb.append("• Autofill: disabled for every Browz field
-");
-        sb.append("• Content capture (assistant apps): disabled
-");
-        sb.append("• External app links (intent:, tel:, market:, mailto:): blocked
-");
-        sb.append("• Screenshots and Recent-apps thumbnails: ").append(screenSecurityFlag ? "blocked while enabled" : "not blocked").append('
-');
-        sb.append("• Downloads: ").append(blockDownloads ? "blocked" : "saved into Browz's private downloads folder").append('
-');
-        sb.append('
-');
-        sb.append("Not controllable from Browz:
-");
-        sb.append("• The Android system keyboard can see text you type into page fields; enable its own private mode to reduce learning.
-");
-        sb.append("• Device administrators, accessibility services, rooted or compromised systems, screenshots taken by other apps when protection is off, and your network operator remain outside Browz's control.
-");
-        sb.append("• Browz is not a VPN or Tor, so websites still see your IP address.");
+        sb.append("Enforced by the app itself:\n");
+        sb.append("Camera: ").append(camera ? "permission declared, page requests still denied" : "no permission declared, so pages cannot open it").append("\n");
+        sb.append("Microphone: ").append(microphone ? "permission declared, page requests still denied" : "no permission declared, so pages cannot record").append("\n");
+        sb.append("Precise location: ").append(location ? "permission declared, page requests still denied" : "no permission declared, so pages cannot locate you").append("\n");
+        sb.append("Autofill: disabled for every Browz field\n");
+        sb.append("Content capture by assistant apps: disabled\n");
+        sb.append("External app links (intent:, tel:, market:, mailto:): blocked\n");
+        sb.append("Screenshots and Recent-apps thumbnails: ").append(screenSecurityFlag ? "blocked while enabled" : "not blocked").append("\n");
+        sb.append("Downloads: ").append(blockDownloads ? "blocked" : "saved into Browz private downloads folder").append("\n");
+        sb.append("\n");
+        sb.append("Not controllable from Browz:\n");
+        sb.append("The Android system keyboard can see text you type into page fields; use its own private mode to reduce learning.\n");
+        sb.append("Device administrators, accessibility services, rooted or compromised systems, screenshots taken by other apps while protection is off, and your network operator remain outside Browz control.\n");
+        sb.append("Browz is not a VPN or Tor, so websites still see your IP address.");
         return sb.toString();
     }
 
