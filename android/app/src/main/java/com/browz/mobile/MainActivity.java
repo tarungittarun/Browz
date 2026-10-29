@@ -1160,6 +1160,12 @@ public class MainActivity extends Activity {
 
     private String cleanAndUpgradeUrl(Uri uri) {
         if (uri == null) return "";
+        // "https://trusted.example@evil.example/" shows trusted.example in some UI
+        // but connects to evil.example; credentials in the authority are dropped.
+        if (uri.isHierarchical() && uri.getUserInfo() != null) {
+            uri = uri.buildUpon().encodedAuthority(uri.getHost() == null ? "" :
+                    (uri.getPort() > 0 ? uri.getHost() + ":" + uri.getPort() : uri.getHost())).build();
+        }
         String finalUrl = uri.toString();
 
         // Strip 35+ URL tracking query parameters (utm_*, fbclid, gclid, msclkid, ttclid, etc.)
@@ -1187,6 +1193,11 @@ public class MainActivity extends Activity {
             finalUrl = "https://" + finalUrl.substring(7);
         }
         return finalUrl;
+    }
+
+    private synchronized void clearRequestLog() {
+        capturedEntries.clear();
+        if (trafficCountBtn != null) trafficCountBtn.setText("Traffic (0)");
     }
 
     private synchronized void recordRequest(String method, String url, String domain, boolean blocked, String reason) {
@@ -2369,8 +2380,7 @@ public class MainActivity extends Activity {
                     tab.webView.clearHistory();
                     tab.webView.clearFormData();
                 }
-                synchronized (this) { capturedEntries.clear(); }
-                trafficCountBtn.setText("Traffic (0)");
+                clearRequestLog();
                 Toast.makeText(this, "Browsing data cleared", Toast.LENGTH_SHORT).show();
             }).show();
     }
@@ -2676,10 +2686,7 @@ public class MainActivity extends Activity {
             .setTitle("Captured Network Traffic")
             .setView(sv)
             .setPositiveButton("Copy request log", (d, w) -> copyRequestLog())
-            .setNeutralButton("Clear Log", (d, w) -> {
-                synchronized (this) { capturedEntries.clear(); }
-                trafficCountBtn.setText("Traffic (0)");
-            })
+            .setNeutralButton("Clear Log", (d, w) -> clearRequestLog())
             .setNegativeButton("Close", null)
             .show();
     }
