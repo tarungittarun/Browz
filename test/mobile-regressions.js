@@ -21,6 +21,16 @@ assert.ok(java.includes('Limit of 12 containers reached'));
 // Network interception: user rules, blocking before the network, and an honest status source.
 assert.ok(java.includes('matchesDomainRule(host, blockedDomainRules)'));
 assert.ok(java.includes('matchesDomainRule(host, allowedDomainRules)'));
+assert.ok(java.includes('isBlockedLocalHost(host)'));
+const interceptBody = java.slice(java.indexOf('public WebResourceResponse shouldInterceptRequest'),
+  java.indexOf('public void onReceivedSslError'));
+for (const branch of ['Air-Gap Radio Kill-Switch Active', 'Blocked SSRF / Loopback / Local Resource',
+  'Blocked by site rule', 'Allowed by site rule', 'Tracker Blocked', 'Request forwarded to network']) {
+  assert.ok(interceptBody.includes(branch), `interception branch missing: ${branch}`);
+}
+assert.ok(interceptBody.indexOf('Blocked SSRF') < interceptBody.indexOf('Blocked by site rule'),
+  'loopback blocking must take precedence over user allow rules');
+assert.ok(java.includes('matchesDomainRule(host, allowedDomainRules)'));
 assert.ok(java.includes('maybeProbeStatus(') && java.includes('setRequestMethod("HEAD")'));
 assert.ok(java.includes('attachStatusToEntry('));
 assert.ok(!java.includes('400 OK') && !java.includes('response unknown'));

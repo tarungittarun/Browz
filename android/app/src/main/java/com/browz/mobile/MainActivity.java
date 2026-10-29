@@ -905,6 +905,20 @@ public class MainActivity extends Activity {
                     return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
                 }
 
+                // User rules: an explicit block stops the request, an explicit allow
+                // exempts the host from the tracker list. Neither can override the
+                // loopback/metadata block above, which must always win.
+                if (!host.isEmpty() && matchesDomainRule(host, blockedDomainRules)) {
+                    blockedTrackersCount++;
+                    recordRequest(method, reqUrl, host, true, "Blocked by site rule");
+                    return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
+                }
+                if (!host.isEmpty() && matchesDomainRule(host, allowedDomainRules)) {
+                    recordRequest(method, reqUrl, host, false, "Allowed by site rule");
+                    maybeProbeStatus(request, reqUrl);
+                    return super.shouldInterceptRequest(view, request);
+                }
+
                 if (blockTrackers && !host.isEmpty()) {
                     for (String tracker : TRACKER_DOMAINS) {
                         if (host.equals(tracker) || host.endsWith("." + tracker)) {
