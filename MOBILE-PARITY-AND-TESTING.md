@@ -3,9 +3,10 @@
 ## Where the 1.0.3 preview APK lives
 
 The current mobile source is built by `.github/workflows/build-android-apk.yml`.
-Each push uploads `Browz-Mobile-1.0.3-preview.apk` to the **draft** release
-`v1.0.3-preview`, which is visible only to repository maintainers, and as a
-workflow artifact. It is signed with the exposed historical key, so it is a
+Each push uploads `Browz-Mobile-1.0.3-preview.apk` and `SHA256SUMS.txt` to the
+**pre-release** `v1.0.3-preview`
+(https://github.com/tarungittarun/Browz/releases/tag/v1.0.3-preview), together
+with a workflow artifact. It is signed with the exposed historical key, so it is a
 preview for testing, not a trusted security update. See `docs/SIGNING.md` for
 the owner-key path that produces a separately signed APK. The start page title
 shows the version, so the build in use can be identified on-device. notes

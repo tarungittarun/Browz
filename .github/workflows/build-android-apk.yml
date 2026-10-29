@@ -92,37 +92,20 @@ jobs:
           fi
           echo "SHA256 (APK): $(sha256sum Browz-Mobile-1.0.3.apk | cut -d' ' -f1)"
 
-      # Draft releases are visible only to repository maintainers, so the APK is
-      # not downloadable by the public while the repository itself is public.
-      - name: Attach preview APK to a draft release
+      # The preview release carries a stable direct download link. It is marked
+      # as a pre-release so it is never advertised as the latest trusted release.
+      - name: Attach preview APK to the preview release
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view v1.0.3-preview >/dev/null 2>&1 || \
-            gh release create v1.0.3-preview --draft \
-              --title "Browz Mobile 1.0.3 preview (draft)" \
-              --notes "Unreleased Android preview signed with the historical exposed test key. Do not treat as a trusted security update."
-          gh release upload v1.0.3-preview Browz-Mobile-1.0.3-preview.apk --clobber
-          gh release view v1.0.3-preview --json assets --jq '.assets[].name'
-
-      # Also publish the APK to a dedicated branch so it can be fetched without
-      # GitHub artifact storage (that service is not reachable from every network).
-      - name: Publish preview APK to apk-preview branch
-        if: github.event_name == 'push'
-        run: |
-          set -e
-          WORK=$(mktemp -d)
-          cp Browz-Mobile-1.0.3-preview.apk "$WORK/"
-          ( cd "$WORK" && sha256sum Browz-Mobile-1.0.3-preview.apk > SHA256SUMS.txt )
-          cd "$WORK"
-          git init -q
-          git checkout -q -b apk-preview
-          git add Browz-Mobile-1.0.3-preview.apk SHA256SUMS.txt
-          git -c user.name="browz-build" -c user.email="browz-build@users.noreply.github.com" \
-              commit -q -m "Browz 1.0.3 preview APK (build ${{ github.sha }})"
-          git push --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" apk-preview
-          cat SHA256SUMS.txt
+            gh release create v1.0.3-preview --prerelease --title "Browz Mobile 1.0.3 preview" \
+              --notes "Unreleased Android preview signed with the historical exposed test key. Not a trusted security update. See docs/SIGNING.md."
+          sha256sum Browz-Mobile-1.0.3-preview.apk > SHA256SUMS.txt
+          gh release upload v1.0.3-preview Browz-Mobile-1.0.3-preview.apk SHA256SUMS.txt --clobber
+          gh release view v1.0.3-preview --json url,isPrerelease,assets \
+            --jq '"url=" + .url, (.assets[] | "asset=" + .name + " size=" + (.size|tostring))'
 
       - name: Upload preview APK (historical test key)
         uses: actions/upload-artifact@v4
