@@ -2,6 +2,7 @@ package com.browz.mobile;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
+import android.app.DownloadManager;
 import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -14,6 +15,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
@@ -51,6 +53,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -103,6 +108,8 @@ public class MainActivity extends Activity {
         final String domain;
         final boolean blocked;
         final String reason;
+        // Real status from the optional HEAD probe; null means "not measured".
+        String status = null;
 
         CapturedEntry(int seq, String timestamp, String method, String url, String domain, boolean blocked, String reason) {
             this.seq = seq;
@@ -138,6 +145,16 @@ public class MainActivity extends Activity {
             this.id = id;
             this.webView = webView;
             this.ghostMode = ghostMode;
+        }
+    }
+
+    private static class ContainerProfile {
+        final int id;
+        final String name;
+
+        ContainerProfile(int id, String name) {
+            this.id = id;
+            this.name = name;
         }
     }
 
@@ -248,6 +265,13 @@ public class MainActivity extends Activity {
     private int strippedParamsCount = 0;
     private int blockedTrackersCount = 0;
     private int seqCounter = 1;
+    private boolean blockDownloads = true;
+    private boolean probeStatuses = true;
+    private final Set<String> blockedDomainRules = new HashSet<>();
+    private final Set<String> allowedDomainRules = new HashSet<>();
+    private final List<ContainerProfile> containers = new ArrayList<>();
+    private int activeContainerId = 1;
+    private int containerIdCounter = 1;
 
     private final List<CapturedEntry> capturedEntries = new ArrayList<>();
     private final List<BookmarkItem> bookmarks = new ArrayList<>(Arrays.asList(
@@ -314,6 +338,8 @@ public class MainActivity extends Activity {
 
         noiseSeed = 100000 + new Random().nextInt(900000);
         loadBookmarks();
+        loadContainers();
+        loadNetworkRules();
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -759,6 +785,17 @@ public class MainActivity extends Activity {
             s.setCacheMode(WebSettings.LOAD_NO_CACHE);
         }
 
+        wv.setDownloadListener((url, userAgent, contentDisposition, mimeType, contentLength) -> {
+            String dlHost = Uri.parse(url).getHost();
+            if (dlHost == null) dlHost = "";
+            if (blockDownloads) {
+                recordRequest("GET", url, dlHost, true, "Download blocked by policy");
+                Toast.makeText(this, "Download blocked. Change this in Menu > Hardware & permissions.", Toast.LENGTH_LONG).show();
+                return;
+            }
+            startSystemDownload(url, userAgent, contentDisposition, mimeType);
+        });
+
         // Long-press link menu (Open in New Tab, Open in Ghost Tab, Copy Clean URL)
         wv.setOnLongClickListener(v -> {
             WebView.HitTestResult hit = wv.getHitTestResult();
@@ -836,6 +873,23 @@ public class MainActivity extends Activity {
                     return new WebResourceResponse("text/plain", "UTF-8", new ByteArrayInputStream(new byte[0]));
                 }
 
+                // User network rules: an explicit site allow wins over the tracker list,
+                // an explicit block prevents the request from leaving the device at all.
+                if (!host.isEmpty() && matchesDomainRule(host, allowedDomainRules)) {
+                    recordRequest(method, reqUrl, host, false, "Allowed by site rule");
+                    maybeProbeStatus(request, reqUrl);
+                    return super.shouldInterceptRequest(view, request);
+                }
+                if (!host.isEmpty() && matchesDomainRule(host, blockedDomainRules)) {
+                    blockedTrackersCount++;
+                    recordRequest(method, reqUrl, host, true, "Blocked by site rule");
+                    return new WebResourceResponse(
+                        "text/plain",
+                        "UTF-8",
+                        new ByteArrayInputStream(new byte[0])
+                    );
+                }
+
                 if (blockTrackers && !host.isEmpty()) {
                     for (String tracker : TRACKER_DOMAINS) {
                         if (host.equals(tracker) || host.endsWith("." + tracker)) {
@@ -850,7 +904,10 @@ public class MainActivity extends Activity {
                     }
                 }
 
-                recordRequest(method, reqUrl, host, false, "OK");
+                // The request is forwarded untouched; the log says so honestly instead
+                // of claiming a status WebView never reported.
+                recordRequest(method, reqUrl, host, false, "Request forwarded to network");
+                maybeProbeStatus(request, reqUrl);
                 return super.shouldInterceptRequest(view, request);
             }
 
@@ -1085,6 +1142,512 @@ public class MainActivity extends Activity {
                 trafficCountBtn.setText("Traffic (" + total + ")");
             }
         });
+    }
+
+    private static boolean matchesDomainRule(String host, Set<String> rules) {
+        if (host == null || host.isEmpty()) return false;
+        String h = host.toLowerCase(Locale.ROOT);
+        for (String rule : rules) {
+            String r = rule.toLowerCase(Locale.ROOT);
+            if (h.equals(r) || h.endsWith("." + r)) return true;
+        }
+        return false;
+    }
+
+    // A HEAD request measures the real response code for a top-level navigation.
+    // It is a separate request, sent without page cookies, and can differ from the
+    // page load (for example a server that rejects HEAD with 405).
+    private void maybeProbeStatus(WebResourceRequest request, String url) {
+        if (!probeStatuses || request == null || !request.isForMainFrame()) return;
+        if (url == null || !(url.startsWith("http://") || url.startsWith("https://"))) return;
+        final String target = url;
+        new Thread(() -> {
+            HttpURLConnection conn = null;
+            String measured;
+            try {
+                conn = (HttpURLConnection) new URL(target).openConnection();
+                conn.setRequestMethod("HEAD");
+                conn.setConnectTimeout(7000);
+                conn.setReadTimeout(7000);
+                conn.setInstanceFollowRedirects(false);
+                conn.setRequestProperty("User-Agent", personas.get(activePersonaIdx).userAgent);
+                measured = "HTTP " + conn.getResponseCode();
+            } catch (Exception e) {
+                measured = "no response";
+            } finally {
+                if (conn != null) conn.disconnect();
+            }
+            final String value = measured;
+            runOnUiThread(() -> attachStatusToEntry(target, value));
+        }, "browz-status-probe").start();
+    }
+
+    private synchronized void attachStatusToEntry(String url, String status) {
+        for (int i = 0; i < capturedEntries.size(); i++) {
+            CapturedEntry e = capturedEntries.get(i);
+            if (!e.blocked && e.status == null && url.equals(e.url)) {
+                capturedEntries.set(i, withStatus(e, status));
+                return;
+            }
+        }
+    }
+
+    private static CapturedEntry withStatus(CapturedEntry e, String status) {
+        CapturedEntry copy = new CapturedEntry(e.seq, e.timestamp, e.method, e.url, e.domain, e.blocked, e.reason);
+        copy.status = status;
+        return copy;
+    }
+
+    private void startSystemDownload(String url, String userAgent, String contentDisposition, String mimeType) {
+        try {
+            String fileName = android.webkit.URLUtil.guessFileName(url, contentDisposition, mimeType);
+            fileName = fileName.replace('/', '_').replace('\\', '_');
+            DownloadManager.Request req = new DownloadManager.Request(Uri.parse(url));
+            req.setMimeType(mimeType);
+            req.addRequestHeader("User-Agent", userAgent);
+            req.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+            File dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+            req.setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, fileName);
+            DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+            if (dm == null) throw new IllegalStateException("download service unavailable");
+            dm.enqueue(req);
+            recordRequest("GET", url, Uri.parse(url).getHost() == null ? "" : Uri.parse(url).getHost(),
+                false, "Download saved to " + (dir == null ? "app downloads" : dir.getAbsolutePath()));
+            Toast.makeText(this, "Download started in Browz downloads", Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Toast.makeText(this, "Download failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    // ---------- Container sessions ----------
+
+    private void loadContainers() {
+        containers.clear();
+        String saved = getPreferences(MODE_PRIVATE).getString("containers", null);
+        if (saved != null) {
+            try {
+                JSONArray data = new JSONArray(saved);
+                for (int i = 0; i < data.length() && i < 12; i++) {
+                    JSONObject o = data.optJSONObject(i);
+                    if (o == null) continue;
+                    int id = o.optInt("id", i + 1);
+                    String name = o.optString("name", "Container");
+                    containers.add(new ContainerProfile(id, name));
+                    containerIdCounter = Math.max(containerIdCounter, id + 1);
+                }
+            } catch (Exception ignored) { }
+        }
+        if (containers.isEmpty()) {
+            containers.add(new ContainerProfile(1, "Personal"));
+            containerIdCounter = 2;
+        }
+        activeContainerId = containers.get(0).id;
+    }
+
+    private void saveContainers() {
+        try {
+            JSONArray data = new JSONArray();
+            for (ContainerProfile c : containers) {
+                JSONObject o = new JSONObject();
+                o.put("id", c.id);
+                o.put("name", c.name);
+                data.put(o);
+            }
+            getPreferences(MODE_PRIVATE).edit().putString("containers", data.toString()).apply();
+        } catch (Exception ignored) { }
+    }
+
+    private ContainerProfile findContainer(int id) {
+        for (ContainerProfile c : containers) if (c.id == id) return c;
+        return containers.isEmpty() ? null : containers.get(0);
+    }
+
+    private String activeContainerName() {
+        ContainerProfile c = findContainer(activeContainerId);
+        return c == null ? "Container" : c.name;
+    }
+
+    private void wipeCookiesAndStorage() {
+        CookieManager cm = CookieManager.getInstance();
+        cm.removeAllCookies(null);
+        cm.flush();
+        WebStorage.getInstance().deleteAllData();
+    }
+
+    // Android WebView has no per-container storage partitions, so switching a
+    // container closes every page and wipes cookies plus site storage first.
+    // Isolation is therefore between containers, not between tabs of one container.
+    private void switchContainer(int id) {
+        ContainerProfile target = findContainer(id);
+        if (target == null || id == activeContainerId) return;
+        for (BrowserTab t : new ArrayList<>(tabs)) {
+            webViewContainer.removeView(t.webView);
+            t.webView.removeJavascriptInterface("BrowzNative");
+            t.webView.stopLoading();
+            t.webView.destroy();
+        }
+        tabs.clear();
+        activeTab = null;
+        wipeCookiesAndStorage();
+        activeContainerId = id;
+        retryAttemptsByUrl.clear();
+        synchronized (this) { capturedEntries.clear(); }
+        if (trafficCountBtn != null) trafficCountBtn.setText("Traffic (0)");
+        createAndSwitchTab("browz://home", false);
+        Toast.makeText(this, "Switched to container: " + target.name + " (all previous sessions closed)", Toast.LENGTH_LONG).show();
+    }
+
+    private void clearContainerState() {
+        wipeCookiesAndStorage();
+        for (BrowserTab t : tabs) {
+            t.webView.clearCache(true);
+            t.webView.clearHistory();
+            t.webView.clearFormData();
+        }
+        synchronized (this) { capturedEntries.clear(); }
+        if (trafficCountBtn != null) trafficCountBtn.setText("Traffic (0)");
+        if (activeTab != null) navigateActiveTab(activeTab.url);
+    }
+
+    private void showContainersDialog() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(12), dp(18), dp(4));
+
+        TextView hint = new TextView(this);
+        hint.setText("Each container is a separate account space. Switching closes every page in the current container, wipes its cookies and site storage, then opens a fresh start page. Nothing is shared between containers while Browz runs, and nothing is saved after you close Browz.");
+        hint.setTextSize(12f);
+        hint.setPadding(0, 0, 0, dp(10));
+        box.addView(hint);
+
+        for (final ContainerProfile c : new ArrayList<>(containers)) {
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(0, dp(3), 0, dp(3));
+
+            TextView label = new TextView(this);
+            label.setText((c.id == activeContainerId ? "● " : "○ ") + c.name);
+            label.setTextSize(14f);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+            label.setLayoutParams(lp);
+            row.addView(label);
+
+            if (c.id != activeContainerId) {
+                Button switchBtn = new Button(this);
+                switchBtn.setText("Switch");
+                switchBtn.setContentDescription("Switch to container " + c.name);
+                switchBtn.setOnClickListener(v -> {
+                    dismissOpenDialog();
+                    switchContainer(c.id);
+                });
+                row.addView(switchBtn);
+            } else {
+                Button clearBtn = new Button(this);
+                clearBtn.setText("Clear");
+                clearBtn.setContentDescription("Clear data for container " + c.name);
+                clearBtn.setOnClickListener(v -> {
+                    dismissOpenDialog();
+                    clearContainerState();
+                    Toast.makeText(this, "Cleared container: " + c.name, Toast.LENGTH_SHORT).show();
+                });
+                row.addView(clearBtn);
+            }
+            box.addView(row);
+        }
+
+        Button newBtn = new Button(this);
+        newBtn.setText("+ New container");
+        newBtn.setContentDescription("New container");
+        newBtn.setOnClickListener(v -> {
+            dismissOpenDialog();
+            createContainer();
+        });
+        box.addView(newBtn);
+
+        openDialog = new AlertDialog.Builder(this)
+            .setTitle("Containers · active: " + activeContainerName())
+            .setView(box)
+            .setNegativeButton("Close", null)
+            .show();
+    }
+
+    private void createContainer() {
+        EditText input = new EditText(this);
+        input.setHint("Container name (for example Work)");
+        input.setSingleLine(true);
+        new AlertDialog.Builder(this)
+            .setTitle("New container")
+            .setView(input)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Create", (d, w) -> {
+                String raw = input.getText() == null ? "" : input.getText().toString().trim();
+                String name = raw.isEmpty() ? ("Container " + containerIdCounter) : raw;
+                if (name.length() > 30) name = name.substring(0, 30);
+                if (containers.size() >= 12) {
+                    Toast.makeText(this, "Limit of 12 containers reached", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                ContainerProfile created = new ContainerProfile(containerIdCounter++, name);
+                containers.add(created);
+                saveContainers();
+                switchContainer(created.id);
+            }).show();
+    }
+
+    private android.app.Dialog openDialog = null;
+
+    private void dismissOpenDialog() {
+        if (openDialog != null) {
+            try { openDialog.dismiss(); } catch (Exception ignored) { }
+            openDialog = null;
+        }
+    }
+
+    // ---------- Network rules ----------
+
+    private void loadNetworkRules() {
+        String saved = getPreferences(MODE_PRIVATE).getString("netRules", null);
+        if (saved == null) return;
+        try {
+            JSONObject data = new JSONObject(saved);
+            JSONArray blocked = data.optJSONArray("blocked");
+            JSONArray allowed = data.optJSONArray("allowed");
+            if (blocked != null) for (int i = 0; i < blocked.length() && i < 200; i++) blockedDomainRules.add(blocked.optString(i));
+            if (allowed != null) for (int i = 0; i < allowed.length() && i < 200; i++) allowedDomainRules.add(allowed.optString(i));
+            probeStatuses = data.optBoolean("probe", true);
+            blockDownloads = data.optBoolean("blockDownloads", true);
+        } catch (Exception ignored) { }
+    }
+
+    private void saveNetworkRules() {
+        try {
+            JSONObject data = new JSONObject();
+            JSONArray blocked = new JSONArray();
+            for (String r : blockedDomainRules) blocked.put(r);
+            JSONArray allowed = new JSONArray();
+            for (String r : allowedDomainRules) allowed.put(r);
+            data.put("blocked", blocked);
+            data.put("allowed", allowed);
+            data.put("probe", probeStatuses);
+            data.put("blockDownloads", blockDownloads);
+            getPreferences(MODE_PRIVATE).edit().putString("netRules", data.toString()).apply();
+        } catch (Exception ignored) { }
+    }
+
+    private void showNetworkRulesDialog() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(12), dp(18), dp(4));
+
+        TextView hint = new TextView(this);
+        hint.setText("Rules apply to every request the browser makes. A block stops the request before it leaves the device. An allow entry exempts a site from the built-in tracker list. Rules are stored on this device only.");
+        hint.setTextSize(12f);
+        hint.setPadding(0, 0, 0, dp(8));
+        box.addView(hint);
+
+        box.addView(makeCheck("Block ad, pixel and SDK trackers", blockTrackers, c -> {
+            blockTrackers = c;
+            saveNetworkRules();
+        }));
+        box.addView(makeCheck("Measure real response status (extra HEAD request)", probeStatuses, c -> {
+            probeStatuses = c;
+            saveNetworkRules();
+        }));
+
+        EditText input = new EditText(this);
+        input.setHint("example.com");
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        box.addView(input);
+
+        LinearLayout btnRow = new LinearLayout(this);
+        btnRow.setOrientation(LinearLayout.HORIZONTAL);
+        Button blockBtn = new Button(this);
+        blockBtn.setText("Block domain");
+        blockBtn.setContentDescription("Block domain");
+        blockBtn.setOnClickListener(v -> {
+            String d = normalizeDomainRule(input.getText() == null ? "" : input.getText().toString());
+            if (d.isEmpty()) {
+                Toast.makeText(this, "Enter a domain such as ads.example.com", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            allowedDomainRules.remove(d);
+            blockedDomainRules.add(d);
+            saveNetworkRules();
+            dismissOpenDialog();
+            showNetworkRulesDialog();
+        });
+        Button allowBtn = new Button(this);
+        allowBtn.setText("Allow domain");
+        allowBtn.setContentDescription("Allow domain");
+        allowBtn.setOnClickListener(v -> {
+            String d = normalizeDomainRule(input.getText() == null ? "" : input.getText().toString());
+            if (d.isEmpty()) {
+                Toast.makeText(this, "Enter a domain such as bank.example", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            blockedDomainRules.remove(d);
+            allowedDomainRules.add(d);
+            saveNetworkRules();
+            dismissOpenDialog();
+            showNetworkRulesDialog();
+        });
+        LinearLayout.LayoutParams half = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        blockBtn.setLayoutParams(half);
+        allowBtn.setLayoutParams(half);
+        btnRow.addView(blockBtn);
+        btnRow.addView(allowBtn);
+        box.addView(btnRow);
+
+        TextView blockedTitle = new TextView(this);
+        blockedTitle.setText("Blocked domains (" + blockedDomainRules.size() + ") - tap to remove");
+        blockedTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        blockedTitle.setPadding(0, dp(10), 0, dp(4));
+        box.addView(blockedTitle);
+        for (final String rule : new ArrayList<>(blockedDomainRules)) {
+            Button b = new Button(this);
+            b.setText(rule);
+            b.setContentDescription("Remove blocked rule " + rule);
+            b.setOnClickListener(v -> {
+                blockedDomainRules.remove(rule);
+                saveNetworkRules();
+                dismissOpenDialog();
+                showNetworkRulesDialog();
+            });
+            box.addView(b);
+        }
+
+        TextView allowedTitle = new TextView(this);
+        allowedTitle.setText("Allowed domains (" + allowedDomainRules.size() + ") - tap to remove");
+        allowedTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        allowedTitle.setPadding(0, dp(10), 0, dp(4));
+        box.addView(allowedTitle);
+        for (final String rule : new ArrayList<>(allowedDomainRules)) {
+            Button b = new Button(this);
+            b.setText(rule);
+            b.setContentDescription("Remove allowed rule " + rule);
+            b.setOnClickListener(v -> {
+                allowedDomainRules.remove(rule);
+                saveNetworkRules();
+                dismissOpenDialog();
+                showNetworkRulesDialog();
+            });
+            box.addView(b);
+        }
+
+        ScrollView sv = new ScrollView(this);
+        sv.addView(box);
+
+        openDialog = new AlertDialog.Builder(this)
+            .setTitle("Network interception rules")
+            .setView(sv)
+            .setPositiveButton("Reload page", (d, w) -> {
+                if (activeTab != null) navigateActiveTab(activeTab.url);
+            })
+            .setNegativeButton("Close", null)
+            .show();
+    }
+
+    private static String normalizeDomainRule(String raw) {
+        String d = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+        if (d.startsWith("http://")) d = d.substring(7);
+        if (d.startsWith("https://")) d = d.substring(8);
+        int slash = d.indexOf('/');
+        if (slash >= 0) d = d.substring(0, slash);
+        int colon = d.indexOf(':');
+        if (colon >= 0) d = d.substring(0, colon);
+        if (d.isEmpty() || d.contains(" ") || !d.contains(".")) return "";
+        return d;
+    }
+
+    // ---------- Hardware, permissions and OS integration ----------
+
+    private void showHardwareDialog() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(18), dp(12), dp(18), dp(4));
+
+        TextView state = new TextView(this);
+        state.setTextSize(12f);
+        state.setText(buildHardwareReport());
+        state.setPadding(0, 0, 0, dp(10));
+        box.addView(state);
+
+        box.addView(makeCheck("Block screenshots and Recent-apps preview (FLAG_SECURE)", screenSecurityFlag, c -> {
+            screenSecurityFlag = c;
+            if (c) {
+                getWindow().setFlags(WindowManager.LayoutParams.FLAG_SECURE, WindowManager.LayoutParams.FLAG_SECURE);
+            } else {
+                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_SECURE);
+                Toast.makeText(this, "Screenshots allowed again; other apps and assistants may capture the page", Toast.LENGTH_LONG).show();
+            }
+        }));
+        box.addView(makeCheck("Block file downloads", blockDownloads, c -> {
+            blockDownloads = c;
+            saveNetworkRules();
+        }));
+        box.addView(makeCheck("Block sensor, USB and Bluetooth JavaScript APIs", shieldSensors, c -> shieldSensors = c));
+        box.addView(makeCheck("Block clipboard reads from pages", blockClipboardRead, c -> blockClipboardRead = c));
+        box.addView(makeCheck("Block local file picker and OPFS disk access", blockFileSystemAccess, c -> blockFileSystemAccess = c));
+
+        ScrollView sv = new ScrollView(this);
+        sv.addView(box);
+
+        openDialog = new AlertDialog.Builder(this)
+            .setTitle("Hardware & permissions")
+            .setView(sv)
+            .setPositiveButton("Reload page", (d, w) -> {
+                if (activeTab != null) navigateActiveTab(activeTab.url);
+            })
+            .setNegativeButton("Close", null)
+            .show();
+    }
+
+    private String buildHardwareReport() {
+        StringBuilder sb = new StringBuilder();
+        boolean camera = appDeclaresPermission("android.permission.CAMERA");
+        boolean microphone = appDeclaresPermission("android.permission.RECORD_AUDIO");
+        boolean location = appDeclaresPermission("android.permission.ACCESS_FINE_LOCATION")
+            || appDeclaresPermission("android.permission.ACCESS_COARSE_LOCATION");
+        sb.append("Enforced by the app itself:
+");
+        sb.append("• Camera: ").append(camera ? "permission declared - page requests are still denied" : "no permission declared, so pages cannot open it").append('
+');
+        sb.append("• Microphone: ").append(microphone ? "permission declared - page requests are still denied" : "no permission declared, so pages cannot record").append('
+');
+        sb.append("• Precise location: ").append(location ? "permission declared - page requests are still denied" : "no permission declared, so pages cannot locate you").append('
+');
+        sb.append("• Autofill: disabled for every Browz field
+");
+        sb.append("• Content capture (assistant apps): disabled
+");
+        sb.append("• External app links (intent:, tel:, market:, mailto:): blocked
+");
+        sb.append("• Screenshots and Recent-apps thumbnails: ").append(screenSecurityFlag ? "blocked while enabled" : "not blocked").append('
+');
+        sb.append("• Downloads: ").append(blockDownloads ? "blocked" : "saved into Browz's private downloads folder").append('
+');
+        sb.append('
+');
+        sb.append("Not controllable from Browz:
+");
+        sb.append("• The Android system keyboard can see text you type into page fields; enable its own private mode to reduce learning.
+");
+        sb.append("• Device administrators, accessibility services, rooted or compromised systems, screenshots taken by other apps when protection is off, and your network operator remain outside Browz's control.
+");
+        sb.append("• Browz is not a VPN or Tor, so websites still see your IP address.");
+        return sb.toString();
+    }
+
+    private boolean appDeclaresPermission(String permission) {
+        try {
+            android.content.pm.PackageInfo info = getPackageManager()
+                .getPackageInfo(getPackageName(), android.content.pm.PackageManager.GET_PERMISSIONS);
+            if (info.requestedPermissions == null) return false;
+            for (String p : info.requestedPermissions) if (permission.equals(p)) return true;
+        } catch (Exception ignored) { }
+        return false;
     }
 
     private String escapeHtmlForMobile(String s) {
@@ -1669,18 +2232,23 @@ public class MainActivity extends Activity {
 
     private void showBrowserMenu() {
         String[] items = {"New tab", "Bookmarks", "Find, zoom and video", "Privacy controls",
+            "Network rules", "Containers (accounts)", "Hardware & permissions",
             "Request log", "Share page", "Clear browsing data", "Privacy and limitations"};
-        new AlertDialog.Builder(this).setTitle("Browz " + getVersionName())
+        openDialog = new AlertDialog.Builder(this)
+            .setTitle("Browz " + getVersionName() + " · " + activeContainerName())
             .setItems(items, (dialog, which) -> {
                 switch (which) {
                     case 0: createAndSwitchTab("browz://home", false); break;
                     case 1: showBookmarksDialog(); break;
                     case 2: showToolsDialog(); break;
                     case 3: showShieldsDialog(); break;
-                    case 4: showTrafficCaptureDialog(); break;
-                    case 5: shareCurrentPage(); break;
-                    case 6: confirmClearBrowsingData(); break;
-                    case 7: showPrivacyInfo(); break;
+                    case 4: showNetworkRulesDialog(); break;
+                    case 5: showContainersDialog(); break;
+                    case 6: showHardwareDialog(); break;
+                    case 7: showTrafficCaptureDialog(); break;
+                    case 8: shareCurrentPage(); break;
+                    case 9: confirmClearBrowsingData(); break;
+                    case 10: showPrivacyInfo(); break;
                 }
             }).setNegativeButton("Close", null).show();
     }
@@ -1737,7 +2305,7 @@ public class MainActivity extends Activity {
 
     private void showPrivacyInfo() {
         new AlertDialog.Builder(this).setTitle("Privacy and limitations")
-            .setMessage("Browz is not Tor or a VPN: websites and network providers may see your IP address. Android WebView shares cookies and site storage across tabs; low-cache tabs are not private or isolated. Request logging is incomplete and cannot show response status or bodies. Network profiles simulate web-facing values, not device Wi-Fi controls. Some page-level shields run after page scripts and are not guaranteed. Bookmarks are saved on this device and may contain sensitive addresses. Android, keyboards and other privileged software may access data.")
+            .setMessage("Browz is not Tor or a VPN: websites and network providers may see your IP address. Containers close every page and wipe cookies plus site storage when you switch, so two accounts are not shared; tabs inside one container do share cookies, and low-cache tabs are not private. Container sessions end when Browz closes. Request logging is incomplete and cannot show response status or bodies. Network profiles simulate web-facing values, not device Wi-Fi controls. Some page-level shields run after page scripts and are not guaranteed. Bookmarks are saved on this device and may contain sensitive addresses. Android, keyboards and other privileged software may access data.")
             .setPositiveButton("Understood", null).show();
     }
 
@@ -2008,7 +2576,7 @@ public class MainActivity extends Activity {
         List<CapturedEntry> entries;
         synchronized (this) { entries = new ArrayList<>(capturedEntries); }
         StringBuilder sb = new StringBuilder();
-        sb.append("Partial request log: WebView does not provide response status, bodies, or all network traffic. URLs may contain sensitive data.\n\nTotal observed: ").append(entries.size())
+        sb.append("Request log: blocked and forwarded requests. When status measuring is on, top-level pages get a real code from a separate HEAD probe, not from the page load. Bodies and request headers are never captured. URLs may contain sensitive data.\n\nTotal observed: ").append(entries.size())
           .append(" | Trackers Blocked: ").append(blockedTrackersCount)
           .append(" | URL Params Stripped: ").append(strippedParamsCount)
           .append("\n\n");
@@ -2017,7 +2585,7 @@ public class MainActivity extends Activity {
         for (int i = 0; i < limit; i++) {
             CapturedEntry e = entries.get(i);
             sb.append("#").append(e.seq).append(" [").append(e.timestamp).append("] ")
-              .append(e.blocked ? "BLOCKED (" + e.reason + ") " : "OBSERVED (response unknown) ")
+              .append(e.blocked ? "BLOCKED (" + e.reason + ") " : "FORWARDED (" + (e.status == null ? "status not measured" : e.status) + ") ")
               .append(e.method).append(" ").append(e.url).append("\n\n");
         }
         if (entries.isEmpty()) {
@@ -2045,10 +2613,13 @@ public class MainActivity extends Activity {
     }
 
     private synchronized void copyRequestLog() {
-        StringBuilder text = new StringBuilder("Browz mobile: partial request log; responses are not captured.\n");
+        StringBuilder text = new StringBuilder("time,method,decision,status,url\n");
         for (CapturedEntry e : capturedEntries) {
-            text.append(e.timestamp).append(" ").append(e.method).append(" ")
-                .append(e.url).append(e.blocked ? " [blocked]" : " [response unknown]").append("\n");
+            text.append(e.timestamp).append(',')
+                .append(e.method).append(',')
+                .append(e.blocked ? "blocked" : "forwarded").append(',')
+                .append(e.status == null ? "" : e.status).append(',')
+                .append('"').append(e.url.replace("\"", "\"\"")).append('"').append('\n');
         }
         ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
         if (cm != null) {
