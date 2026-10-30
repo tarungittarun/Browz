@@ -1945,6 +1945,42 @@ public class MainActivity extends Activity {
                 "  def(navigator, 'serial', undefined);" +
                 "  def(navigator, 'hid', undefined);" +
                 "  def(navigator, 'getGamepads', markNative(() => [], 'getGamepads'));" +
+                // Network Information API exposes the live radio type, plus measured
+                // downlink and RTT. Left real, it tells a page "cellular, 2.1 Mbps" and
+                // contradicts any speed-based assumptions the persona makes.
+                "  try {" +
+                "    const fakeConn = {" +
+                "      type: '" + (p.isMobile ? "cellular" : "wifi") + "'," +
+                "      effectiveType: '" + (p.isMobile ? "4g" : "4g") + "'," +
+                "      downlink: 10, rtt: 50, saveData: false," +
+                "      onchange: null," +
+                "      addEventListener: markNative(function(){}, 'addEventListener')," +
+                "      removeEventListener: markNative(function(){}, 'removeEventListener')" +
+                "    };" +
+                "    def(navigator, 'connection', fakeConn);" +
+                "    def(navigator, 'mozConnection', undefined);" +
+                "    def(navigator, 'webkitConnection', undefined);" +
+                "  } catch(e){}" +
+                // Touch capability is also advertised through CSS media queries, which a
+                // page can read without touching navigator at all.
+                "  try {" +
+                "    const origMM = window.matchMedia;" +
+                "    window.matchMedia = markNative(function(q){" +
+                "      const m = origMM.apply(window, arguments);" +
+                "      const touch = " + (p.isMobile ? "true" : "false") + ";" +
+                "      const forced = { 'pointer:coarse': touch, 'pointer:fine': !touch," +
+                "        'any-pointer:coarse': touch, 'any-pointer:fine': !touch," +
+                "        'hover:none': touch, 'hover:hover': !touch," +
+                "        'any-hover:none': touch, 'any-hover:hover': !touch };" +
+                "      const key = String(q).replace(/\\s+/g, '').replace(/\\)$/, '');" +
+                "      if (Object.prototype.hasOwnProperty.call(forced, key)) {" +
+                "        def(m, 'matches', forced[key]);" +
+                "      }" +
+                "      return m;" +
+                "    }, 'matchMedia');" +
+                "  } catch(e){}" +
+                "  try { def(screen, 'orientation', { type: 'portrait-primary', angle: 0, onchange: null });" +
+                "    if (screen.orientation) { screen.orientation.lock = markNative(async function(){ return false; }, 'lock'); } } catch(e){}" +
                 "  if (navigator.mediaDevices) { navigator.mediaDevices.enumerateDevices = markNative(async () => [], 'enumerateDevices'); }" +
                 "  if (navigator.sendBeacon) { navigator.sendBeacon = markNative(function() { return true; }, 'sendBeacon'); }" +
                 "  window.DeviceMotionEvent = undefined;" +

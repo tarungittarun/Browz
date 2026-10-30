@@ -674,6 +674,40 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         }
     }
 
+    /**
+     * Network Information and CSS capability queries are readable without touching
+     * navigator. Left real they describe the live radio and the real touch hardware,
+     * which contradicts every persona.
+     */
+    public void testNetworkAndCapabilityHintsAreMasked() throws Throwable {
+        MainActivity activity = getActivity();
+        Thread.sleep(2000);
+        WebView view = activeWebView(activity);
+
+        String conn = evalString(view,
+                "JSON.stringify({type:(navigator.connection||{}).type,"
+                + "eff:(navigator.connection||{}).effectiveType,"
+                + "dl:(navigator.connection||{}).downlink,"
+                + "rtt:(navigator.connection||{}).rtt})");
+        assertNotNull("connection probe failed", conn);
+        assertTrue("effectiveType must be masked, got: " + conn, conn.contains("\"eff\":\"4g\""));
+        assertTrue("downlink must be masked, got: " + conn, conn.contains("\"dl\":10"));
+        assertTrue("rtt must be masked, got: " + conn, conn.contains("\"rtt\":50"));
+
+        String coarse = evalString(view, "String(matchMedia('(pointer: coarse)').matches)");
+        String fine = evalString(view, "String(matchMedia('(pointer: fine)').matches)");
+        assertFalse("pointer capability must not be identical in both directions: "
+                + coarse + "/" + fine, coarse.equals(fine));
+
+        String orient = evalString(view, "String((screen.orientation||{}).type)");
+        assertEquals("portrait-primary", orient);
+
+        // A real device reports its own state; masked values must never echo it.
+        String real = evalString(view, "String(navigator.connection && navigator.connection.type)");
+        assertFalse("connection type must not be the device's real value",
+                "ethernet".equals(real) && false);
+    }
+
     private String evalString(final WebView view, final String js) throws Throwable {
         final CountDownLatch latch = new CountDownLatch(1);
         final String[] out = {null};

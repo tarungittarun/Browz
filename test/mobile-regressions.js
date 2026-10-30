@@ -108,6 +108,11 @@ assert.ok(java.includes("def(navigator, 'maxTouchPoints'"), 'touch points must b
 assert.ok(java.includes("def(window, 'devicePixelRatio'"), 'pixel ratio must be spoofed');
 assert.ok(!java.includes("def(navigator, 'hardwareConcurrency', 8)"),
   'core count must not be a constant for every user');
+assert.ok(java.includes("def(navigator, 'connection'"),
+  'navigator.connection leaks the live radio and must be masked');
+assert.ok(java.includes("window.matchMedia = markNative"),
+  'CSS pointer/hover capability queries must follow the persona');
+assert.ok(java.includes("def(screen, 'orientation'"), 'screen orientation must be pinned');
 assert.ok(java.includes("def(navigator, 'vendor'"), 'navigator.vendor must match the persona browser');
 assert.ok(java.includes("def(navigator, 'appVersion'"), 'appVersion must match the persona user agent');
 assert.ok(java.includes("(shieldClientHints && p.chromium)"),
