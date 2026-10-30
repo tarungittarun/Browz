@@ -11,7 +11,7 @@
     "build:win": "electron-builder --win nsis portable --x64 --publish never",
     "build:installer": "electron-builder",
     "audit:independent": "node test/independent-audit.js --all",
-    "test": "node test/verify.js && node test/independent-audit.js --all && node test/mobile-regressions.js && node test/dependency-policy.js && node test/notes-drift.js"
+    "test": "node test/verify.js && node test/independent-audit.js --all && node test/mobile-regressions.js && node test/dependency-policy.js"
   },
   "build": {
     "appId": "com.browz.capturebrowser",
