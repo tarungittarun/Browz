@@ -138,14 +138,15 @@ p('This is the question people ask most, so here it is plainly. The table is abo
 table([['What the site learns','Ordinary browser','Browz mobile'],
 ['Your IP address and the region it implies','Visible','<b>Still visible</b> — there is no VPN or Tor inside Browz'],
 ['Phone model, Android version, browser name','Visible','Replaced with a chosen profile (Pixel 9, iPhone, Windows PC, Firefox-style)'],
-['Screen size, graphics card name, CPU core count','Visible','Screen and graphics are replaced; core count is always reported as 8'],
+['Screen size, graphics card name, CPU core count','Visible','Screen and graphics are replaced; core count follows the profile (8 phone, 16 desktop)'],
 ['Drawing and audio fingerprint','Stable and unique','Made slightly different on purpose (canvas, audio, WebGL), same within a session'],
 ['Clock and timezone','Your real one','Reported as the profile timezone (UTC), including what pages print from a date'],
 ['Whether the browser is being automated','Exposed','Reported as "no"'],
 ['Ad and tracker cookies from other domains','Usually allowed','Blocked'],
 ['Requests to known tracker domains','Sent','Stopped before they leave the phone'],
 ['WebRTC (may reveal more about your network)','Allowed','Blocked, which also breaks some video calls'],
-['Access to your installed fonts and plugin list','Visible','<b>Not hidden</b> — a known gap']],[56,52,64])
+['Your installed fonts','Visible','<b>Still not hidden</b> — the one real gap left'],
+['Your browser\'s plugin list and touch-screen details','Visible','Replaced to match the profile (none on a phone, five on a desktop)']],[56,52,64])
 sub('After you sign in, the shield is no longer the main question')
 p('Logging in hands the site a name: a cookie or token that says "this is account #12345". From then on the site does not need to fingerprint you, because you told it who you are. It also learns your email, your password, and every page you open on that site while signed in. No browser can hide that, and Browz does not pretend to.')
 bullets('<b>Still hidden after login:</b> other sites receive no such cookie, third-party trackers in the page stay blocked, and the device details you present are the profile, not your real phone.','<b>Not hidden after login:</b> the site knows it is you, it can link this visit to the last one, and it sees your IP address.','<b>What actually separates two logins is a container, not the shield.</b> Use Menu → Containers and open each identity in its own container so one site cannot see the other\'s cookies.')
@@ -153,7 +154,7 @@ box('<b>One thing that was fixed because of this question:</b> the browser used 
 sub('Three questions people ask next')
 table([['Question','Short answer'],
 ['Does this make me anonymous?','No. A site still sees your address and can still recognise a returning pattern from its own logs. Browz reduces what is collected; it does not hide who you are.'],
-['Can a site tell Browz from Chrome?','Sometimes. Installed fonts and the plugin list are still readable, and a page can measure many small details at once. Treat the profile as a costume, not a disguise.'],
+['Can a site tell Browz from Chrome?','Sometimes. Your installed fonts are still readable — that is the one device detail Browz does not change — and a page can measure many small things at once. Treat the profile as a costume, not a disguise.'],
 ['Is it safe for banking and email?','Traffic is still HTTPS with certificate checks on, so keep them on and keep Android System WebView updated. Do not disable protections on a site that holds your money.']],[52,120])
 
 new();h('11  How this build was checked (and what can still fail)')

@@ -88,6 +88,12 @@ public class MainActivity extends Activity {
         final int screenW;
         final int screenH;
         final boolean isMobile;
+        // Previously hardcoded (always 8 / 8) or simply left real, which made every
+        // user share the same value or leak the actual device.
+        final int cores;
+        final int memoryGb;
+        final int touchPoints;
+        final String pixelRatio;
 
         Persona(String id, String label, String ua, String platform, String vendor, String renderer, String tz, int w, int h, boolean isMobile) {
             this.id = id;
@@ -100,6 +106,12 @@ public class MainActivity extends Activity {
             this.screenW = w;
             this.screenH = h;
             this.isMobile = isMobile;
+            // Derive coherent hardware facts from the device class, so the persona never
+            // claims a touch-less Windows PC on a phone or an iPhone with 16 cores.
+            this.cores = isMobile ? 8 : 16;
+            this.memoryGb = isMobile ? 8 : 8;
+            this.touchPoints = isMobile ? 5 : 0;
+            this.pixelRatio = isMobile ? "3" : "1";
         }
     }
 
@@ -1850,8 +1862,8 @@ public class MainActivity extends Activity {
             "  def(navigator, 'globalPrivacyControl', true);" +
             "  def(navigator, 'pdfViewerEnabled', true);" +
             "  def(navigator, 'platform', '" + p.platform + "');" +
-            "  def(navigator, 'hardwareConcurrency', 8);" +
-            "  def(navigator, 'deviceMemory', 8);" +
+            "  def(navigator, 'hardwareConcurrency', " + p.cores + ");" +
+            "  def(navigator, 'deviceMemory', " + p.memoryGb + ");" +
             "  def(navigator, 'language', 'en-US');" +
             "  def(navigator, 'languages', Object.freeze(['en-US', 'en']));" +
             "  if (window.screen) {" +
@@ -1862,6 +1874,38 @@ public class MainActivity extends Activity {
             "    def(window.screen, 'colorDepth', 24);" +
             "    def(window.screen, 'pixelDepth', 24);" +
             "  }" +
+            // Left unspoofed before, these two contradicted the persona: an "iPhone"
+            // that reports zero touch points and a 2.625 pixel ratio is obviously a phone.
+            "  def(navigator, 'maxTouchPoints', " + p.touchPoints + ");" +
+            "  def(window, 'devicePixelRatio', " + p.pixelRatio + ");" +
+            // The plugin list is a classic identifier. Android Chrome ships none; desktop
+            // Chrome ships the five built-in PDF entries. Report whichever fits the persona.
+            "  const PDF_PLUGINS = [" +
+            "    ['PDF Viewer', 'internal-pdf-viewer', 'Portable Document Format']," +
+            "    ['Chrome PDF Viewer', 'internal-pdf-viewer', 'Portable Document Format']," +
+            "    ['Chromium PDF Viewer', 'internal-pdf-viewer', 'Portable Document Format']," +
+            "    ['Microsoft Edge PDF Viewer', 'internal-pdf-viewer', 'Portable Document Format']," +
+            "    ['WebKit built-in PDF', 'internal-pdf-viewer', 'Portable Document Format']" +
+            "  ];" +
+            "  const PDF_MIMES = [['application/pdf', 'pdf'], ['text/pdf', 'pdf']];" +
+            "  const asList = (items) => {" +
+            "    const arr = items;" +
+            "    arr.item = function(i){ return arr[i] || null; };" +
+            "    arr.namedItem = function(n){ for (let i = 0; i < arr.length; i++) { if (arr[i].name === n) return arr[i]; } return null; };" +
+            "    arr.refresh = function(){};" +
+            "    return arr;" +
+            "  };" +
+            "  try {" +
+            "    const wantPlugins = " + (p.isMobile ? "[]" : "PDF_PLUGINS") + ";" +
+            "    const pluginList = asList(wantPlugins.map(function(e){" +
+            "      return { name: e[0], filename: e[1], description: e[2], length: " + (p.isMobile ? 0 : 2) + " };" +
+            "    }));" +
+            "    const mimeList = asList((" + (p.isMobile ? "[]" : "PDF_MIMES") + ").map(function(e){" +
+            "      return { type: e[0], suffixes: e[1], description: 'Portable Document Format', enabledPlugin: pluginList[0] || null };" +
+            "    }));" +
+            "    def(navigator, 'plugins', pluginList);" +
+            "    def(navigator, 'mimeTypes', mimeList);" +
+            "  } catch(e){}" +
             (shieldClientHints ? (
                 "  const fakeBrands = Object.freeze([{ brand: 'Chromium', version: '131' }, { brand: 'Not_A Brand', version: '24' }]);" +
                 "  def(navigator, 'userAgentData', {" +

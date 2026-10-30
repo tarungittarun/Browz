@@ -103,6 +103,14 @@ assert.ok(!java.includes('__BROWZ_MOBILE_SHIELD_ACTIVE__'), 'no window marker ma
 assert.ok(!java.includes("Object.defineProperty(window, 'BrowzNative'"), 'no bridge property on external pages');
 assert.ok(java.includes('shieldInjectedFor'), 'injection idempotence is tracked natively');
 
+// Device facts must follow the persona instead of being real or shared by everyone.
+assert.ok(java.includes("def(navigator, 'maxTouchPoints'"), 'touch points must be spoofed');
+assert.ok(java.includes("def(window, 'devicePixelRatio'"), 'pixel ratio must be spoofed');
+assert.ok(!java.includes("def(navigator, 'hardwareConcurrency', 8)"),
+  'core count must not be a constant for every user');
+assert.ok(java.includes("def(navigator, 'plugins'"), 'plugin list must be normalised');
+assert.ok(java.includes("def(navigator, 'mimeTypes'"), 'mime list must be normalised');
+
 // Clock and Intl must describe the same timezone, or the mismatch itself is a fingerprint.
 assert.ok(java.includes('java.util.TimeZone.getTimeZone(p.timezone)'),
   'the clock offset must be derived from the persona, not hardcoded');

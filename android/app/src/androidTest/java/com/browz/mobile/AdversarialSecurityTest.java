@@ -576,6 +576,46 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         assertEquals("the shield must not leave a detectable window marker", "undefined", marker);
     }
 
+    /**
+     * Reports from the device that used to be left real or hardcoded for everyone:
+     * touch points, pixel ratio, core count and the plugin list. Each must agree with
+     * the persona, because a mismatch between the User-Agent and these values is itself
+     * the fingerprint.
+     */
+    public void testPersonaFactsAreConsistent() throws Throwable {
+        MainActivity activity = getActivity();
+        Thread.sleep(2000);
+        WebView view = activeWebView(activity);
+
+        String touch = evalString(view, "String(navigator.maxTouchPoints)");
+        String dpr = evalString(view, "String(window.devicePixelRatio)");
+        String cores = evalString(view, "String(navigator.hardwareConcurrency)");
+        String plugins = evalString(view, "String(navigator.plugins.length)");
+        String mimes = evalString(view, "String(navigator.mimeTypes.length)");
+        String platform = evalString(view, "navigator.platform");
+        String ua = evalString(view, "navigator.userAgent");
+
+        boolean mobilePersona = ua.contains("Mobile") || ua.contains("iPhone");
+
+        if (mobilePersona || "Linux armv81".equals(platform) || "iPhone".equals(platform)) {
+            assertEquals("a mobile persona must report touch input", "5", touch);
+            assertEquals("Android and iOS browsers ship no built-in plugins", "0", plugins);
+            assertEquals("plugin count and mime count must agree", "0", mimes);
+        } else {
+            assertEquals("a desktop persona must not claim a touch screen", "0", touch);
+            assertEquals("desktop Chrome reports five built-in PDF plugins", "5", plugins);
+            assertEquals("desktop Chrome reports two PDF mime types", "2", mimes);
+        }
+
+        // Never leave these to the real handset, whatever the persona is.
+        assertTrue("pixel ratio must be set by the persona, got " + dpr, dpr.matches("[0-9.]+"));
+        int coreCount = Integer.parseInt(cores);
+        assertTrue("core count must be a plausible spoofed value, got " + cores,
+                coreCount == 8 || coreCount == 16);
+        assertEquals("pixel ratio must match the persona class",
+                mobilePersona || "iPhone".equals(platform) || "Linux armv81".equals(platform) ? "3" : "1", dpr);
+    }
+
     private String evalString(final WebView view, final String js) throws Throwable {
         final CountDownLatch latch = new CountDownLatch(1);
         final String[] out = {null};
