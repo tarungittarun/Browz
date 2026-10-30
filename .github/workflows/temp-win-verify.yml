@@ -24,12 +24,10 @@ jobs:
           node -p "require('./node_modules/electron/package.json').version" | Out-File -Append -Encoding utf8 build-info.txt
           node -p "require('./node_modules/electron-builder/package.json').version" | Out-File -Append -Encoding utf8 build-info.txt
       - name: Build the Windows installer
+        shell: pwsh
         run: |
-          2>&1 | Tee-Object -FilePath build-log.txt
-          $code = 0
-          npm run build:win 2>&1 | Tee-Object -FilePath build-log.txt -Append
-          $code = $LASTEXITCODE
-          "exit=$code" | Out-File -Append -Encoding utf8 build-info.txt
+          npm run build:win *> build-log.txt
+          "exit=$LASTEXITCODE" | Out-File -Append -Encoding utf8 build-info.txt
           exit 0
       - name: Record artifact facts
         if: always()
