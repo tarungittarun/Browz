@@ -561,6 +561,15 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         assertTrue("toLocaleTimeString used the device zone instead of the persona: " + locale,
                 locale.contains("12:00:00") && locale.contains("AM"));
 
+        // Formatting through a fresh formatter must also use the persona zone.
+        String direct = evalString(view,
+                "new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).format(new Date(0))");
+        assertEquals("new Intl.DateTimeFormat() leaked the device clock", "00:00:00", direct);
+
+        String twoArg = evalString(view, "new Date(0).toLocaleTimeString('en-US', { hour12: false })");
+        assertTrue("toLocaleTimeString ignored the persona zone with explicit options: " + twoArg,
+                twoArg.contains("00:00:00"));
+
         String marker = evalString(view, "typeof window.__BROWZ_MOBILE_SHIELD_ACTIVE__");
         assertEquals("the shield must not leave a detectable window marker", "undefined", marker);
     }

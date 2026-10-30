@@ -1962,12 +1962,42 @@ public class MainActivity extends Activity {
                 "  Date.prototype.toString = markNative(function(){ if (isNaN(this.getTime())) return 'Invalid Date'; return dateStr(this) + ' ' + timeStr(this) + tail(this); }, 'toString');" +
                 "  Date.prototype.toTimeString = markNative(function(){ if (isNaN(this.getTime())) return 'Invalid Date'; return timeStr(this) + tail(this); }, 'toTimeString');" +
                 "  Date.prototype.toDateString = markNative(function(){ if (isNaN(this.getTime())) return 'Invalid Date'; return dateStr(this); }, 'toDateString');" +
-                "  const tzOpts = (args) => { const o = (args && args[0] && typeof args[0] === 'object') ? Object.assign({}, args[0]) : {}; o.timeZone = TZ; return [o, args && args[1]]; };" +
+                // Date.toLocaleXxx(locales, options): the first argument is a locale, so
+                // feeding options into it silently ignores the timezone. Accept both shapes.
                 "  ['toLocaleString', 'toLocaleTimeString', 'toLocaleDateString'].forEach(function(m){" +
                 "    const orig = Date.prototype[m];" +
                 "    if (typeof orig !== 'function') return;" +
-                "    Date.prototype[m] = markNative(function(){ const a = tzOpts(arguments); return orig.call(this, a[0], a[1]); }, m);" +
-                "  });"
+                "    Date.prototype[m] = markNative(function(){" +
+                "      const args = Array.prototype.slice.call(arguments);" +
+                "      let locales; let opts;" +
+                "      if (args.length && (typeof args[0] === 'string' || Object.prototype.toString.call(args[0]) === '[object Array]')) {" +
+                "        locales = args[0];" +
+                "        if (args.length > 1 && args[1] && typeof args[1] === 'object') opts = Object.assign({}, args[1]);" +
+                "      } else if (args.length && args[0] && typeof args[0] === 'object') {" +
+                "        opts = Object.assign({}, args[0]);" +
+                "      } else if (args.length > 1 && args[1] && typeof args[1] === 'object') {" +
+                "        opts = Object.assign({}, args[1]);" +
+                "      }" +
+                "      opts = opts || {};" +
+                "      if (!opts.timeZone) opts.timeZone = TZ;" +
+                "      return locales === undefined ? orig.call(this, opts) : orig.call(this, locales, opts);" +
+                "    }, m);" +
+                "  });" +
+                // A page that formats with new Intl.DateTimeFormat() and no explicit zone
+                // would otherwise render the device's clock.
+                "  try {" +
+                "    const OrigDTF = Intl.DateTimeFormat;" +
+                "    const PatchedDTF = function(locales, options){" +
+                "      let o = {};" +
+                "      if (options && typeof options === 'object') o = Object.assign({}, options);" +
+                "      else if (locales && typeof locales === 'object' && Object.prototype.toString.call(locales) !== '[object Array]') o = Object.assign({}, locales);" +
+                "      if (!o.timeZone) o.timeZone = TZ;" +
+                "      return new OrigDTF(locales, o);" +
+                "    };" +
+                "    PatchedDTF.prototype = OrigDTF.prototype;" +
+                "    PatchedDTF.supportedLocalesOf = OrigDTF.supportedLocalesOf;" +
+                "    Object.defineProperty(Intl, 'DateTimeFormat', { value: markNative(PatchedDTF, 'DateTimeFormat'), writable: true, configurable: true });" +
+                "  } catch(e){}"
             ) : "") +
             (shieldWebGL ? (
                 "  const patchGL = (proto) => {" +

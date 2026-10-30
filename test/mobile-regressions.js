@@ -114,6 +114,10 @@ assert.ok(java.includes("'toLocaleString', 'toLocaleTimeString', 'toLocaleDateSt
   'locale date/time renderings must be pinned to the persona timezone');
 assert.ok(!java.includes("getTimezoneOffset = markNative(() => 0"),
   'the timezone offset must not be hardcoded');
+assert.ok(java.includes("PatchedDTF.prototype = OrigDTF.prototype"),
+  'a wrapped Intl.DateTimeFormat must keep its prototype so instanceof still works');
+assert.ok(java.includes("const args = Array.prototype.slice.call(arguments)"),
+  'toLocaleXxx must accept both (locales, options) and (options) argument shapes');
 assert.ok(java.includes('"GET".equalsIgnoreCase(request.getMethod())'));
 assert.ok(manifest.includes('android:name="android.webkit.WebView.EnableSafeBrowsing"\n            android:value="true"'));
 const apkWorkflow = fs.readFileSync('.github/workflows/build-android-apk.yml', 'utf8');
