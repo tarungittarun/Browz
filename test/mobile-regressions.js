@@ -115,6 +115,11 @@ assert.ok(java.includes("window.matchMedia = markNative"),
 assert.ok(java.includes("def(screen, 'orientation'"), 'screen orientation must be pinned');
 assert.ok(java.includes("navigator.permissions.query = markNative"),
   'permission states reveal settings and must be normalised');
+assert.ok(java.includes("document.fonts.check = markNative"),
+  'document.fonts.check is a font-enumeration oracle and must be normalised');
+assert.ok(java.includes("CanvasRenderingContext2D.prototype.measureText = markNative"),
+  'measureText comparison is the other font-enumeration oracle');
+assert.ok(java.includes('ALLOWED_FONTS'), 'only a fixed font set may be reported');
 assert.ok(java.includes("def(window, 'outerWidth'"),
   'window outer size must not exceed the spoofed screen');
 assert.ok(java.includes("def(navigator, 'vendor'"), 'navigator.vendor must match the persona browser');

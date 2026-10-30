@@ -271,6 +271,9 @@ public class MainActivity extends Activity {
     private int activePersonaIdx = 0;
     private int noiseSeed = 482910;
     private boolean shieldCanvas = true;
+    // Font enumeration via document.fonts.check() and canvas measureText() is the
+    // largest remaining device leak: the installed font set is close to unique.
+    private boolean shieldFonts = true;
     private boolean shieldWebGL = true;
     private boolean shieldAudio = true;
     private boolean shieldClientRects = true;
@@ -2135,6 +2138,60 @@ public class MainActivity extends Activity {
                 "  if (typeof WebGLRenderingContext !== 'undefined') patchGL(WebGLRenderingContext.prototype);" +
                 "  if (typeof WebGL2RenderingContext !== 'undefined') patchGL(WebGL2RenderingContext.prototype);"
             ) : "") +
+            (shieldFonts ? (
+                // Only fonts every device of this class really has. Anything else is
+                // reported as absent, so enumeration converges instead of identifying.
+                "  const ALLOWED_FONTS = " + (p.isMobile
+                    ? "['roboto','noto sans','droid sans','droid sans fallback','noto color emoji','sans-serif','serif','monospace','system-ui','cursive','fantasy']"
+                    : "['arial','helvetica','times new roman','times','courier new','courier','verdana','georgia','tahoma','sans-serif','serif','monospace','system-ui']") + ";" +
+                "  const fontAllowed = (family) => {" +
+                "    const f = String(family).replace(/^[\"']|[\"']$/g, '').trim().toLowerCase();" +
+                "    return ALLOWED_FONTS.indexOf(f) !== -1;" +
+                "  };" +
+                "  try {" +
+                "    if (document.fonts && document.fonts.check) {" +
+                "      const origCheck = document.fonts.check.bind(document.fonts);" +
+                "      document.fonts.check = markNative(function(font, text){" +
+                "        try {" +
+                "          const spec = parseFontSpec(font);" +
+                "          if (spec && spec.families.length) {" +
+                "            for (let i = 0; i < spec.families.length; i++) { if (!fontAllowed(spec.families[i])) return false; }" +
+                "          }" +
+                "        } catch(e){}" +
+                "        return origCheck(font, text);" +
+                "      }, 'check');" +
+                "    }" +
+                "  } catch(e){}" +
+                // measureText is the other half of the enumeration trick: render the same
+                // word in a candidate font and a fallback, then compare widths.
+                "  try {" +
+                "    if (typeof CanvasRenderingContext2D !== 'undefined' && CanvasRenderingContext2D.prototype.measureText) {" +
+                "      const origMeasure = CanvasRenderingContext2D.prototype.measureText;" +
+                "      CanvasRenderingContext2D.prototype.measureText = markNative(function(text){" +
+                "        let saved = null;" +
+                "        try {" +
+                "          const spec = parseFontSpec(this.font);" +
+                "          if (spec && spec.families.length) {" +
+                "            let bad = false;" +
+                "            for (let i = 0; i < spec.families.length; i++) { if (!fontAllowed(spec.families[i])) { bad = true; break; } }" +
+                "            if (bad) { saved = this.font; this.font = spec.prefix + ' sans-serif'; }" +
+                "          }" +
+                "        } catch(e){}" +
+                "        const r = origMeasure.apply(this, arguments);" +
+                "        if (saved !== null) { try { this.font = saved; } catch(e){} }" +
+                "        return r;" +
+                "      }, 'measureText');" +
+                "    }" +
+                "  } catch(e){}" +
+                "  function parseFontSpec(font) {" +
+                "    const s = String(font || '');" +
+                "    const m = s.match(/^(.+?\\.?\\d+(?:\\.\\d+)?(?:px|pt|em|rem|%|vw|vh)[^ ]*)\\s+(.+)$/);" +
+                "    if (!m) return null;" +
+                "    const families = m[2].split(',').map(function(x){ return x.trim(); }).filter(Boolean);" +
+                "    return { prefix: m[1], families: families };" +
+                "  }" +
+                "  try { if (document.fonts) { def(document.fonts, 'size', ALLOWED_FONTS.length); } } catch(e){}"
+            ) : "") +
             (shieldCanvas ? (
                 "  if (typeof CanvasRenderingContext2D !== 'undefined' && CanvasRenderingContext2D.prototype.getImageData) {" +
                 "    const origGID = CanvasRenderingContext2D.prototype.getImageData;" +
@@ -2832,6 +2889,7 @@ public class MainActivity extends Activity {
         box.addView(cyclePersonaBtn);
 
         box.addView(makeCheck("Canvas 2D Noise (toDataURL & getImageData)", shieldCanvas, c -> shieldCanvas = c));
+        box.addView(makeCheck("Hide Installed Fonts (document.fonts & measureText)", shieldFonts, c -> shieldFonts = c));
         box.addView(makeCheck("WebGL Mobile GPU Spoofing", shieldWebGL, c -> shieldWebGL = c));
         box.addView(makeCheck("AudioContext & AnalyserNode Noise", shieldAudio, c -> shieldAudio = c));
         box.addView(makeCheck("ClientRects Font-Measurement Jitter", shieldClientRects, c -> shieldClientRects = c));

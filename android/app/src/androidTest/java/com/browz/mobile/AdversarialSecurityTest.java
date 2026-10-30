@@ -724,6 +724,38 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
                 "ethernet".equals(real) && false);
     }
 
+    /**
+     * The classic font-enumeration trick: measure the same word in a candidate font
+     * and in a fallback, then compare widths. With hundreds of fonts this is close to a
+     * device fingerprint. Unknown families must measure identically to the fallback and
+     * document.fonts.check() must say no.
+     */
+    public void testFontEnumerationCollapses() throws Throwable {
+        MainActivity activity = getActivity();
+        Thread.sleep(2000);
+        WebView view = activeWebView(activity);
+
+        String result = evalString(view,
+                "(()=>{try{"
+                + "const c=document.createElement('canvas');const x=c.getContext('2d');"
+                + "const measure=(f)=>{x.font='72px '+f;return x.measureText('mmmmmmmmmmlli').width;};"
+                + "const exotic=['Wingdings','Brush Script MT','Papyrus','Roboto Slab','Segoe Script'];"
+                + "const base=measure('sans-serif');"
+                + "const diffs=exotic.map(f=>Math.abs(measure(f)-base));"
+                + "const check=['Wingdings','Papyrus','Roboto'].map(f=>document.fonts.check('12px '+f));"
+                + "return JSON.stringify({maxDiff:Math.max.apply(null,diffs),check:check});"
+                + "}catch(e){return 'ERR:'+e.message}})()");
+
+        assertNotNull("font probe failed", result);
+        assertFalse("font probe threw: " + result, result.startsWith("ERR:"));
+        double maxDiff = Double.parseDouble(
+                result.replaceAll(".*\"maxDiff\":([0-9.E-]+).*", "$1"));
+        assertTrue("unknown fonts must measure identically to the fallback, maxDiff="
+                + maxDiff + " raw=" + result, maxDiff < 0.001);
+        assertTrue("a non-installed font must not be reported as available: " + result,
+                result.contains("\"check\":[false,false,") || result.contains("\"check\":[false,false,false]"));
+    }
+
     private String evalString(final WebView view, final String js) throws Throwable {
         final CountDownLatch latch = new CountDownLatch(1);
         final String[] out = {null};
