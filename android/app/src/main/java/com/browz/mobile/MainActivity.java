@@ -239,6 +239,9 @@ public class MainActivity extends Activity {
     private final String bridgeSecret = UUID.randomUUID().toString();
     private final Handler uiHandler = new Handler(Looper.getMainLooper());
     private final Map<String, Integer> retryAttemptsByUrl = new HashMap<>();
+    // Which URL the shield was last injected into for each page; replaces the old
+    // window global that any website could read.
+    private final java.util.WeakHashMap<WebView, String> shieldInjectedFor = new java.util.WeakHashMap<>();
 
     private int activePersonaIdx = 0;
     private int noiseSeed = 482910;
@@ -1002,6 +1005,7 @@ public class MainActivity extends Activity {
                 super.onPageStarted(view, url, favicon);
                 boolean isInternal = url != null && url.startsWith("https://browz.local/");
                 if (!isInternal) view.removeJavascriptInterface("BrowzNative");
+                shieldInjectedFor.put(view, url == null ? "" : url);
                 view.evaluateJavascript(buildMobileStealthJs(isInternal), null);
                 BrowserTab tab = findTabByWebView(view);
                 if (tab != null) {
@@ -1021,7 +1025,11 @@ public class MainActivity extends Activity {
                 super.onPageFinished(view, url);
                 boolean isInternal = url != null && url.startsWith("https://browz.local/");
                 if (!isInternal) view.removeJavascriptInterface("BrowzNative");
-                view.evaluateJavascript(buildMobileStealthJs(isInternal), null);
+                String injectedFor = shieldInjectedFor.get(view);
+                if (injectedFor == null || !injectedFor.equals(url == null ? "" : url)) {
+                    shieldInjectedFor.put(view, url == null ? "" : url);
+                    view.evaluateJavascript(buildMobileStealthJs(isInternal), null);
+                }
                 BrowserTab tab = findTabByWebView(view);
                 if (tab != null) {
                     setTabLoadingState(tab, false);
@@ -1819,14 +1827,22 @@ public class MainActivity extends Activity {
     private String buildMobileStealthJs(boolean keepInternalBridge) {
         Persona p = personas.get(activePersonaIdx);
         String platHint = p.isMobile ? "Android" : "Windows";
+        // Derive the clock offset from the persona instead of hardcoding UTC, so a
+        // future non-UTC persona cannot contradict Intl.DateTimeFormat.
+        int personaOffsetMin;
+        try {
+            personaOffsetMin = java.util.TimeZone.getTimeZone(p.timezone)
+                .getOffset(System.currentTimeMillis()) / 60000;
+        } catch (Throwable ignored) {
+            personaOffsetMin = 0;
+        }
+        final int tzOffsetMinutes = personaOffsetMin;
         return "(function(){" +
-            "if (window.__BROWZ_MOBILE_SHIELD_ACTIVE__) return;" +
-            "try { Object.defineProperty(window, '__BROWZ_MOBILE_SHIELD_ACTIVE__', { value: true, enumerable: false, configurable: true, writable: true }); } catch(e){ window.__BROWZ_MOBILE_SHIELD_ACTIVE__ = true; }" +
             "try {" +
             "  const nativeMap = typeof WeakMap !== 'undefined' ? new WeakMap() : null;" +
             "  const markNative = (fn, name) => { if (typeof fn === 'function' && nativeMap) { try { nativeMap.set(fn, 'function ' + (name || fn.name || '') + '() { [native code] }'); } catch(e){} } return fn; };" +
             "  try { const origTS = Function.prototype.toString; const cloakedTS = markNative(function(){ return (nativeMap && nativeMap.has(this)) ? nativeMap.get(this) : origTS.apply(this, arguments); }, 'toString'); Object.defineProperty(Function.prototype, 'toString', { value: cloakedTS, writable: true, configurable: true }); } catch(e){}" +
-            (keepInternalBridge ? "" : "  try { Object.defineProperty(window, 'BrowzNative', { get: () => undefined, configurable: true }); } catch(e){}") +
+            (keepInternalBridge ? "" : "") +
             "  const SEED = " + noiseSeed + ";" +
             "  const def = (o, k, v) => { if (!o) return; try { Object.defineProperty(o, k, { get: markNative(() => v, 'get ' + k), configurable: true }); } catch(e){} };" +
             "  def(navigator, 'webdriver', false);" +
@@ -1925,14 +1941,33 @@ public class MainActivity extends Activity {
                 "  }"
             ) : "") +
             (shieldTimezone ? (
+                "  const TZ = '" + p.timezone + "';" +
+                "  const TZOFF = " + tzOffsetMinutes + ";" +
                 "  const origRO = Intl.DateTimeFormat.prototype.resolvedOptions;" +
                 "  Intl.DateTimeFormat.prototype.resolvedOptions = markNative(function(){" +
                 "    const r = origRO.apply(this, arguments);" +
-                "    r.timeZone = '" + p.timezone + "';" +
+                "    r.timeZone = TZ;" +
                 "    r.locale = 'en-US';" +
                 "    return r;" +
                 "  }, 'resolvedOptions');" +
-                "  Date.prototype.getTimezoneOffset = markNative(() => 0, 'getTimezoneOffset');"
+                // The clock must agree with the spoofed zone in every rendering, or a
+                // single new Date().toString() reveals the phone's real timezone.
+                "  const fmtIn = (d, o) => { const c = Object.assign({ timeZone: TZ }, o); return new Intl.DateTimeFormat('en-US', c).format(d); };" +
+                "  const offLabel = () => { const a = Math.abs(TZOFF); const hh = String(Math.floor(a / 60)).padStart(2, '0'); const mm = String(a % 60).padStart(2, '0'); return 'GMT' + (TZOFF >= 0 ? '+' : '-') + hh + mm; };" +
+                "  const zoneName = (d) => { try { const parts = new Intl.DateTimeFormat('en-US', { timeZone: TZ, timeZoneName: 'long' }).formatToParts(d); for (let i = 0; i < parts.length; i++) { if (parts[i].type === 'timeZoneName') return parts[i].value; } } catch(e){} return 'Coordinated Universal Time'; };" +
+                "  const timeStr = (d) => fmtIn(d, { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });" +
+                "  const dateStr = (d) => fmtIn(d, { weekday: 'short', month: 'short', day: '2-digit', year: 'numeric' }).replace(/,/g, '');" +
+                "  const tail = (d) => ' ' + offLabel() + ' (' + zoneName(d) + ')';" +
+                "  Date.prototype.getTimezoneOffset = markNative(function(){ return -TZOFF; }, 'getTimezoneOffset');" +
+                "  Date.prototype.toString = markNative(function(){ if (isNaN(this.getTime())) return 'Invalid Date'; return dateStr(this) + ' ' + timeStr(this) + tail(this); }, 'toString');" +
+                "  Date.prototype.toTimeString = markNative(function(){ if (isNaN(this.getTime())) return 'Invalid Date'; return timeStr(this) + tail(this); }, 'toTimeString');" +
+                "  Date.prototype.toDateString = markNative(function(){ if (isNaN(this.getTime())) return 'Invalid Date'; return dateStr(this); }, 'toDateString');" +
+                "  const tzOpts = (args) => { const o = (args && args[0] && typeof args[0] === 'object') ? Object.assign({}, args[0]) : {}; o.timeZone = TZ; return [o, args && args[1]]; };" +
+                "  ['toLocaleString', 'toLocaleTimeString', 'toLocaleDateString'].forEach(function(m){" +
+                "    const orig = Date.prototype[m];" +
+                "    if (typeof orig !== 'function') return;" +
+                "    Date.prototype[m] = markNative(function(){ const a = tzOpts(arguments); return orig.call(this, a[0], a[1]); }, m);" +
+                "  });"
             ) : "") +
             (shieldWebGL ? (
                 "  const patchGL = (proto) => {" +

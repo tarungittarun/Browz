@@ -512,6 +512,43 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         assertTrue("WebRTC must be blocked: " + result, result.contains("\"rtc\":\"blocked\""));
     }
 
+    /**
+     * A page can catch a fake timezone in two lines: compare Intl's resolvedOptions()
+     * with new Date().toString(). Both must describe the same clock, and no page may
+     * find a marker proving a shield was injected.
+     */
+    public void testClockAgreesWithSpoofedTimezone() throws Throwable {
+        final MainActivity activity = getActivity();
+        Thread.sleep(2000);
+        final WebView view = activeWebView(activity);
+
+        String tz = evalString(view, "Intl.DateTimeFormat().resolvedOptions().timeZone");
+        assertEquals("persona timezone must be reported as UTC", "UTC", tz);
+
+        String offset = evalString(view, "String(new Date(0).getTimezoneOffset())");
+        assertEquals("getTimezoneOffset must match the spoofed zone", "0", offset);
+
+        // Deterministic: epoch 0 is 00:00:00 UTC, so any other rendering leaks the device zone.
+        String epoch = evalString(view, "new Date(0).toString()");
+        assertEquals("Thu Jan 01 1970 00:00:00 GMT+0000 (Coordinated Universal Time)", epoch);
+
+        String epochTime = evalString(view, "new Date(0).toTimeString()");
+        assertTrue("toTimeString leaked a foreign clock: " + epochTime,
+                epochTime.startsWith("00:00:00 GMT+0000"));
+
+        String deviceZone = java.util.TimeZone.getDefault().getID();
+        String deviceName = java.util.TimeZone.getDefault().getDisplayName(false, java.util.TimeZone.LONG);
+        assertFalse("toString leaked the device timezone " + deviceZone, epoch.contains(deviceZone));
+        assertFalse("toString leaked the device zone name " + deviceName, epoch.contains(deviceName));
+
+        String locale = evalString(view, "new Date(0).toLocaleTimeString('en-US')");
+        assertTrue("toLocaleTimeString used the device zone instead of the persona: " + locale,
+                locale.contains("12:00:00") && locale.contains("AM"));
+
+        String marker = evalString(view, "typeof window.__BROWZ_MOBILE_SHIELD_ACTIVE__");
+        assertEquals("the shield must not leave a detectable window marker", "undefined", marker);
+    }
+
     private String evalString(final WebView view, final String js) throws Throwable {
         final CountDownLatch latch = new CountDownLatch(1);
         final String[] out = {null};

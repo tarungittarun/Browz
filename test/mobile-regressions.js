@@ -98,6 +98,22 @@ assert.ok(!java.includes('"200 OK "'));
 assert.ok(!java.includes('Copy HAR 1.2 JSON'));
 assert.ok(java.includes('not Tor or a VPN'));
 assert.ok(java.includes('removeJavascriptInterface("BrowzNative")'));
+// Stealth: the injected script must not leave globals a site can detect.
+assert.ok(!java.includes('__BROWZ_MOBILE_SHIELD_ACTIVE__'), 'no window marker may be defined');
+assert.ok(!java.includes("Object.defineProperty(window, 'BrowzNative'"), 'no bridge property on external pages');
+assert.ok(java.includes('shieldInjectedFor'), 'injection idempotence is tracked natively');
+
+// Clock and Intl must describe the same timezone, or the mismatch itself is a fingerprint.
+assert.ok(java.includes('java.util.TimeZone.getTimeZone(p.timezone)'),
+  'the clock offset must be derived from the persona, not hardcoded');
+assert.ok(java.includes("Date.prototype.toString = markNative("),
+  'Date.toString must render in the persona timezone');
+assert.ok(java.includes("Date.prototype.toTimeString = markNative("),
+  'Date.toTimeString must render in the persona timezone');
+assert.ok(java.includes("'toLocaleString', 'toLocaleTimeString', 'toLocaleDateString'"),
+  'locale date/time renderings must be pinned to the persona timezone');
+assert.ok(!java.includes("getTimezoneOffset = markNative(() => 0"),
+  'the timezone offset must not be hardcoded');
 assert.ok(java.includes('"GET".equalsIgnoreCase(request.getMethod())'));
 assert.ok(manifest.includes('android:name="android.webkit.WebView.EnableSafeBrowsing"\n            android:value="true"'));
 const apkWorkflow = fs.readFileSync('.github/workflows/build-android-apk.yml', 'utf8');

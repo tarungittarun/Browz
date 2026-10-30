@@ -291,9 +291,15 @@ async function runVerification() {
     console.log('✓ 12. Triple-Layer 18-Point Security Audit (Client Hints, WebUSB/Bluetooth, SSRF, Bookmarks) verified');
 
     // 13. End-to-End Mobile Browser Compatibility & Triple Security Verification
-    assert.ok(mainActivityJava.includes('__BROWZ_MOBILE_SHIELD_ACTIVE__'), 'Mobile shield must have idempotent execution guard');
+    assert.ok(mainActivityJava.includes('shieldInjectedFor'),
+      'Mobile shield must be injected once per page, tracked natively rather than by a detectable window global');
     assert.ok(mainActivityJava.includes('bridgeSecret'), 'Mobile JS bridge must require per-session cryptographic secret');
-    assert.ok(mainActivityJava.includes("Object.defineProperty(window, 'BrowzNative', { get: () => undefined"), 'Mobile bridge must hide BrowzNative on external sites');
+    assert.ok(mainActivityJava.includes('removeJavascriptInterface("BrowzNative")'),
+      'Mobile bridge must be removed on external sites');
+    assert.ok(!mainActivityJava.includes("Object.defineProperty(window, 'BrowzNative'"),
+      'must not create a detectable BrowzNative property on external pages');
+    assert.ok(!mainActivityJava.includes('__BROWZ_MOBILE_SHIELD_ACTIVE__'),
+      'the shield must not leave a window marker that identifies Browz');
     assert.ok(mainActivityJava.includes('retryAttemptsByUrl'), 'Mobile browser must support automatic transient network retries');
     assert.ok(mainActivityJava.includes('renderBookmarksBar'), 'Mobile browser must include scrollable Bookmarks Bar');
     assert.ok(mainActivityJava.includes('setTextZoom'), 'Mobile browser must support Page Zoom controls');

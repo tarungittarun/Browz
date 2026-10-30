@@ -1514,8 +1514,9 @@ const JOBS = [
       const javaSrc = readRepoFile('android/app/src/main/java/com/browz/mobile/MainActivity.java');
 
       assert.ok(
-        javaSrc.includes("Object.defineProperty(window, 'BrowzNative', { get: () => undefined, configurable: true })"),
-        'External mobile pages must have window.BrowzNative masked as undefined'
+        javaSrc.includes('removeJavascriptInterface("BrowzNative")'),
+        'External mobile pages must have the native bridge removed, not merely masked, '
+        + 'because a defined property is itself detectable via the "in" operator'
       );
       assert.ok(
         javaSrc.includes('"browz.local".equals(host) || host.endsWith(".browz.local")'),
