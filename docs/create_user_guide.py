@@ -133,7 +133,30 @@ p('Newer build: Menu → <b>Privacy controls</b>. Historical APK: tap <b>Shield<
 sub('Request log')
 p('Newer build: Menu → <b>Request log</b>. It lists some observed or blocked requests and can copy or clear the log. WebView does not report all requests or the corresponding response status, headers or bodies here. URLs may be sensitive.')
 box('Historical APK warning: its Traffic display can label requests “200 OK” without knowing the actual response and can suggest a HAR export. Do not rely on its status or export as evidence of real responses.')
-new();h('10  How this build was checked (and what can still fail)')
+new();h('10  What a website can see about you')
+p('This is the question people ask most, so here it is plainly. The table is about one website in one tab, before you sign in. "Ordinary browser" means Chrome or Edge on the same phone.')
+table([['What the site learns','Ordinary browser','Browz mobile'],
+['Your IP address and the region it implies','Visible','<b>Still visible</b> — there is no VPN or Tor inside Browz'],
+['Phone model, Android version, browser name','Visible','Replaced with a chosen profile (Pixel 9, iPhone, Windows PC, Firefox-style)'],
+['Screen size, graphics card name, CPU core count','Visible','Screen and graphics are replaced; core count is always reported as 8'],
+['Drawing and audio fingerprint','Stable and unique','Made slightly different on purpose (canvas, audio, WebGL), same within a session'],
+['Clock and timezone','Your real one','Reported as the profile timezone (UTC), including what pages print from a date'],
+['Whether the browser is being automated','Exposed','Reported as "no"'],
+['Ad and tracker cookies from other domains','Usually allowed','Blocked'],
+['Requests to known tracker domains','Sent','Stopped before they leave the phone'],
+['WebRTC (may reveal more about your network)','Allowed','Blocked, which also breaks some video calls'],
+['Access to your installed fonts and plugin list','Visible','<b>Not hidden</b> — a known gap']],[56,52,64])
+sub('After you sign in, the shield is no longer the main question')
+p('Logging in hands the site a name: a cookie or token that says "this is account #12345". From then on the site does not need to fingerprint you, because you told it who you are. It also learns your email, your password, and every page you open on that site while signed in. No browser can hide that, and Browz does not pretend to.')
+bullets('<b>Still hidden after login:</b> other sites receive no such cookie, third-party trackers in the page stay blocked, and the device details you present are the profile, not your real phone.','<b>Not hidden after login:</b> the site knows it is you, it can link this visit to the last one, and it sees your IP address.','<b>What actually separates two logins is a container, not the shield.</b> Use Menu → Containers and open each identity in its own container so one site cannot see the other\'s cookies.')
+box('<b>One thing that was fixed because of this question:</b> the browser used to announce the profile timezone (UTC) to scripts, but still printed the phone\'s real local time when a page asked for a date as text. That mismatch was a giveaway. Every date rendering now uses the profile timezone, and the test that proves it runs on a test phone deliberately set to India time, so a regression fails the build instead of passing quietly.')
+sub('Three questions people ask next')
+table([['Question','Short answer'],
+['Does this make me anonymous?','No. A site still sees your address and can still recognise a returning pattern from its own logs. Browz reduces what is collected; it does not hide who you are.'],
+['Can a site tell Browz from Chrome?','Sometimes. Installed fonts and the plugin list are still readable, and a page can measure many small details at once. Treat the profile as a costume, not a disguise.'],
+['Is it safe for banking and email?','Traffic is still HTTPS with certificate checks on, so keep them on and keep Android System WebView updated. Do not disable protections on a site that holds your money.']],[52,120])
+
+new();h('11  How this build was checked (and what can still fail)')
 p('Every published preview build passes two automatic gates. The first inspects the signed APK file itself; the second runs the app on an Android 34 test phone image.')
 sub('Gate 1: the APK file is inspected, not the source')
 steps('Package name, version 1.0.3 and Android target level 34 are confirmed.','The file must not be debuggable, and must request only the internet permission: no camera, microphone, location, contacts, SMS or storage access exists to misuse.','Backups are disabled, plain HTTP is refused, and only built-in system certificates are trusted, so a user-installed fake certificate cannot read the traffic.','Exactly one component may be reachable from other apps, and the file must be signed with the modern v2 and v3 signature schemes.','The build fails if the exposed historical key is used without an explicit preview flag, so a trusted release cannot be cut by mistake.')
@@ -143,12 +166,12 @@ p('They also fuzz the address bar with 300 random hostile strings and assert not
 p('Separately, the browser now refuses to let a page open the system file picker on its own, and audio cannot autoplay before you touch the page.')
 box('<b>What these tests cannot promise:</b> they are this project\'s own tests, not an independent audit. Only an emulator has run them, so real phones, older WebView versions, foldables and low-memory devices are untested. A WebView security bug is fixed by Google, not here. Browz is not a VPN or Tor, so your address stays visible to sites and your operator. Fingerprinting, accessibility services, a rooted device and a compromised signing key remain real risks.')
 p('See THREAT-MODEL.md in the repository for the scenario-by-scenario table, the exact commands, and the list of unverified areas.')
-new();h('10  Privacy, access and troubleshooting')
+new();h('12  Privacy, access and troubleshooting')
 sub('Who can see your information?')
 bullets('<b>Websites and networks:</b> sites can see your IP; the network provider can observe destination metadata. HTTPS protects content in transit but does not provide anonymity.','<b>Device and apps:</b> a compromised OS, administrators, accessibility services, keyboards, malware or privileged tools may see data. Ordinary Android app sandboxing helps, but is not a guarantee against these threats.','<b>Exports and clipboard:</b> traffic files, shared links, bookmarks and copied URLs may include sensitive information. Treat them like credentials.')
 sub('When something does not work')
 table([['Problem','Try this'],['Site does not load','Check connection and URL, then Reload. Some pages need permissions or features Browz restricts. Do not disable protections for untrusted sites.'],['Video or login is broken','Try the site’s own controls; review settings one at a time and reload. Video fit and injected shields are not compatible with every site.'],['Android install/update conflict','Compare the installed and proposed signing certificates; package name alone is insufficient. Do not uninstall until you understand data loss. The exposed signing key requires migration.'],['Need separate Android accounts','Do not use low-cache/Ghost tabs for isolation. Use a browser designed and tested for separate profiles or a suitable OS profile.'],['Traffic looks incomplete','This is expected: capture is partial, especially on Android. Use independently verified network tools when accuracy is important.']],[53,119])
-new();h('11  Testing and current limitations')
+new();h('13  Testing and current limitations')
 p('The newer Android app was built and ran a small number of UI tests on an Android 34 emulator. Those tests cover toolbar visibility, menu/tabs access and bookmark persistence. They do not establish real-device usability, website compatibility, security, privacy or account isolation.')
 p('<b>About a trusted APK:</b> the exposed signing key cannot be trusted again. A trustworthy update needs a key that only the maintainer holds, configured as repository Actions secrets; the build workflow then produces a separately signed APK and prints its certificate and checksum. Moving to such a key requires a one-time uninstall of builds signed with the exposed key.','Smallg')
 p('Automated JavaScript checks also pass, but many inspect source code rather than behavior. Neither platform has received an independent security audit. The Windows public installer and historical Android APK do not include the latest unpublished Android changes.')
@@ -157,5 +180,5 @@ bullets('Keep Android System WebView and your operating system updated.','Avoid 
 p('Further details: '+link('https://github.com/tarungittarun/Browz/blob/arena/906ee2db-browz/MOBILE-PARITY-AND-TESTING.md','Mobile parity and testing')+' · '+link('https://github.com/tarungittarun/Browz/blob/arena/906ee2db-browz/SECURITY-AND-OS-ISOLATION.md','Device and OS privacy')+'.')
 p('Screenshots and descriptions are documentation of observed or implemented behavior, not a promise of performance or safety.','Smallg')
 def footer(canvas,doc):
- canvas.saveState();w,h=A4;canvas.setStrokeColor(colors.HexColor('#dce4ea'));canvas.line(19*mm,17*mm,w-19*mm,17*mm);canvas.setFont('DejaVu',7.5);canvas.setFillColor(colors.HexColor('#68788a'));canvas.drawString(19*mm,12*mm,'BROWZ  •  USER GUIDE  •  29 OCT 2026');canvas.drawRightString(w-19*mm,12*mm,str(doc.page));canvas.restoreState()
+ canvas.saveState();w,h=A4;canvas.setStrokeColor(colors.HexColor('#dce4ea'));canvas.line(19*mm,17*mm,w-19*mm,17*mm);canvas.setFont('DejaVu',7.5);canvas.setFillColor(colors.HexColor('#68788a'));canvas.drawString(19*mm,12*mm,'BROWZ  •  USER GUIDE  •  30 OCT 2026');canvas.drawRightString(w-19*mm,12*mm,str(doc.page));canvas.restoreState()
 doc=SimpleDocTemplate(out,pagesize=A4,rightMargin=19*mm,leftMargin=19*mm,topMargin=18*mm,bottomMargin=23*mm,title='Browz User Guide',author='Browz');doc.build(story,onFirstPage=footer,onLaterPages=footer);print(out)

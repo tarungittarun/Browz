@@ -15,6 +15,16 @@
 - CSV request-log export with a real status column.
 
 ### Security
+- **The shield no longer identifies itself.** It used to define
+  `window.__BROWZ_MOBILE_SHIELD_ACTIVE__` and a `BrowzNative` property on every page,
+  so a single `'BrowzNative' in window` check revealed Browz. Both are gone; injection
+  is tracked natively per page.
+- **The clock now agrees with the announced timezone.** `Intl` reported the persona
+  zone (UTC) while `Date.prototype.toString`, `toTimeString` and `toLocale*` still
+  printed the phone's real local time — a two-line fingerprint. All renderings,
+  including `new Intl.DateTimeFormat()` without an explicit zone, now use the persona
+  clock. Covered by a device test that runs on an emulator forced to +05:30, so a
+  regression cannot pass on a UTC device.
 - Mixed content is never allowed; an HTTPS page cannot load HTTP subresources.
 - Invalid TLS certificates are always cancelled and logged; client-certificate and
   HTTP-auth prompts are refused.
