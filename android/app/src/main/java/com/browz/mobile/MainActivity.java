@@ -94,6 +94,11 @@ public class MainActivity extends Activity {
         final int memoryGb;
         final int touchPoints;
         final String pixelRatio;
+        // Derived from the user agent so the identity can never contradict itself.
+        final boolean chromium;
+        final String navigatorVendor;
+        final String appVersion;
+        final String productSub;
 
         Persona(String id, String label, String ua, String platform, String vendor, String renderer, String tz, int w, int h, boolean isMobile) {
             this.id = id;
@@ -112,6 +117,14 @@ public class MainActivity extends Activity {
             this.memoryGb = isMobile ? 8 : 8;
             this.touchPoints = isMobile ? 5 : 0;
             this.pixelRatio = isMobile ? "3" : "1";
+            // Safari and Firefox are not Chromium: exposing navigator.userAgentData or a
+            // Chromium brand list under an iPhone/Safari user agent is a one-line giveaway.
+            this.chromium = ua.contains("Chrome/") && !ua.contains("Firefox/");
+            // Chrome user agents also contain "Safari/", so test for Chrome first.
+            this.navigatorVendor = ua.contains("Firefox/") ? ""
+                : (ua.contains("Chrome/") ? "Google Inc." : "Apple Computer, Inc.");
+            this.appVersion = ua.startsWith("Mozilla/") ? ua.substring("Mozilla/".length) : ua;
+            this.productSub = ua.contains("Firefox/") ? "20100101" : "20030107";
         }
     }
 
@@ -1862,6 +1875,13 @@ public class MainActivity extends Activity {
             "  def(navigator, 'globalPrivacyControl', true);" +
             "  def(navigator, 'pdfViewerEnabled', true);" +
             "  def(navigator, 'platform', '" + p.platform + "');" +
+            "  def(navigator, 'vendor', '" + p.navigatorVendor + "');" +
+            "  def(navigator, 'appVersion', '" + p.appVersion.replace("'", "\\'") + "');" +
+            "  def(navigator, 'productSub', '" + p.productSub + "');" +
+            (p.chromium
+                ? ""
+                : "  def(navigator, 'userAgentData', undefined);" +
+                  "  try { def(window, 'chrome', undefined); } catch(e){}") +
             "  def(navigator, 'hardwareConcurrency', " + p.cores + ");" +
             "  def(navigator, 'deviceMemory', " + p.memoryGb + ");" +
             "  def(navigator, 'language', 'en-US');" +
@@ -1906,7 +1926,7 @@ public class MainActivity extends Activity {
             "    def(navigator, 'plugins', pluginList);" +
             "    def(navigator, 'mimeTypes', mimeList);" +
             "  } catch(e){}" +
-            (shieldClientHints ? (
+            ((shieldClientHints && p.chromium) ? (
                 "  const fakeBrands = Object.freeze([{ brand: 'Chromium', version: '131' }, { brand: 'Not_A Brand', version: '24' }]);" +
                 "  def(navigator, 'userAgentData', {" +
                 "    brands: fakeBrands," +

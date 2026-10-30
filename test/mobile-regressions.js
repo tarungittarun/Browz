@@ -108,6 +108,14 @@ assert.ok(java.includes("def(navigator, 'maxTouchPoints'"), 'touch points must b
 assert.ok(java.includes("def(window, 'devicePixelRatio'"), 'pixel ratio must be spoofed');
 assert.ok(!java.includes("def(navigator, 'hardwareConcurrency', 8)"),
   'core count must not be a constant for every user');
+assert.ok(java.includes("def(navigator, 'vendor'"), 'navigator.vendor must match the persona browser');
+assert.ok(java.includes("def(navigator, 'appVersion'"), 'appVersion must match the persona user agent');
+assert.ok(java.includes("(shieldClientHints && p.chromium)"),
+  'client hints must be suppressed for non-Chromium personas');
+assert.ok(java.includes("def(navigator, 'userAgentData', undefined)"),
+  'a Safari persona must not expose Chromium client hints');
+assert.ok(java.includes("ua.contains(\"Chrome/\") ? \"Google Inc.\""),
+  'Chrome user agents contain Safari/, so Chrome must be tested before Safari');
 assert.ok(java.includes("def(navigator, 'plugins'"), 'plugin list must be normalised');
 assert.ok(java.includes("def(navigator, 'mimeTypes'"), 'mime list must be normalised');
 

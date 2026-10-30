@@ -616,6 +616,64 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
                 mobilePersona || "iPhone".equals(platform) || "Linux armv81".equals(platform) ? "3" : "1", dpr);
     }
 
+    /**
+     * A costume that contradicts itself is worse than no costume: an "iPhone" that
+     * exposes Chromium client hints, or a Chrome that reports Apple as its vendor, is
+     * trivially detected. Check the generated script for every persona.
+     */
+    public void testPersonaIdentityNeverContradictsItsUserAgent() throws Throwable {
+        MainActivity activity = getActivity();
+        java.lang.reflect.Method build =
+                MainActivity.class.getDeclaredMethod("buildMobileStealthJs", boolean.class);
+        build.setAccessible(true);
+        java.lang.reflect.Field idx = MainActivity.class.getDeclaredField("activePersonaIdx");
+        idx.setAccessible(true);
+        int original = idx.getInt(activity);
+        try {
+            for (int i = 0; i < 4; i++) {
+                idx.setInt(activity, i);
+                String js = (String) build.invoke(activity, false);
+                java.lang.reflect.Field personasField =
+                        MainActivity.class.getDeclaredField("personas");
+                personasField.setAccessible(true);
+                java.util.List<?> personas = (java.util.List<?>) personasField.get(activity);
+                Object persona = personas.get(i);
+                java.lang.reflect.Field uaField = persona.getClass().getDeclaredField("userAgent");
+                uaField.setAccessible(true);
+                String ua = (String) uaField.get(persona);
+                String name = ua.contains("iPhone") ? "iPhone"
+                        : (ua.contains("Firefox/") ? "Firefox" : "Chromium");
+
+                if ("Chromium".equals(name)) {
+                    assertTrue("persona " + i + " is Chromium and must expose client hints",
+                            js.contains("getHighEntropyValues"));
+                    assertTrue("persona " + i + " must report Google as vendor when UA says Chrome",
+                            js.contains("def(navigator, 'vendor', 'Google Inc.')"));
+                    assertFalse("persona " + i + " is Chromium but hides userAgentData",
+                            js.contains("def(navigator, 'userAgentData', undefined)"));
+                } else {
+                    assertFalse("persona " + i + " claims " + name
+                                    + " but still exposes Chromium client hints",
+                            js.contains("getHighEntropyValues"));
+                    assertTrue("persona " + i + " claims " + name
+                                    + " and must not expose userAgentData",
+                            js.contains("def(navigator, 'userAgentData', undefined)"));
+                }
+                if ("iPhone".equals(name)) {
+                    assertTrue(js.contains("def(navigator, 'vendor', 'Apple Computer, Inc.')"));
+                }
+                if ("Firefox".equals(name)) {
+                    assertTrue(js.contains("def(navigator, 'vendor', '')"));
+                    assertTrue(js.contains("def(navigator, 'productSub', '20100101')"));
+                }
+                assertTrue("appVersion must match the user agent for persona " + i,
+                        js.contains("def(navigator, 'appVersion', '5.0 "));
+            }
+        } finally {
+            idx.setInt(activity, original);
+        }
+    }
+
     private String evalString(final WebView view, final String js) throws Throwable {
         final CountDownLatch latch = new CountDownLatch(1);
         final String[] out = {null};
