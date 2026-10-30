@@ -76,6 +76,58 @@ container/network/hardware screens open without crashing.
 | Server asks for stored credentials / client cert | `HttpAuthHandler.cancel()`, `ClientCertRequest.cancel()` | Static suite (auth handler), device test (client cert) | Untested on real enterprise networks |
 | Tracker or beacon requests | Built-in list + user rules + third-party cookies off | Device tests | First-party tracking, CNAME cloaking and server-side tagging survive |
 
+## What a website learns, compared with an ordinary browser
+
+This is the honest answer to "if I sign in somewhere, what does the site know about
+me?" It separates three things that are easy to confuse: what Browz hides, what is
+unavoidable, and what changes the moment you log in.
+
+| The site can learn | Ordinary Android browser | Browz mobile | Why |
+| --- | --- | --- | --- |
+| Your public IP address and rough region from it | Yes | **Yes — not hidden** | There is no VPN or Tor in Browz. This is the strongest identifier and it survives every other control. |
+| Device model, OS version, browser brand from the User-Agent | Yes | Masked to a chosen persona | Four personas; `navigator.platform`, screen size, WebGL vendor and renderer are rewritten to match. |
+| Whether automation controls the browser (`navigator.webdriver`) | Exposed | Forced `false` | Static, not a behavioural model, so it cannot detect a determined page. |
+| Drawing/audio fingerprint (canvas, WebGL, audio buffers) | Yes, stable | Noised per session seed | The noise uses a constant seed per persona, so the *same* persona looks consistent; a browser restart does not change it. |
+| Real clock and timezone | Yes | Reported as the persona's UTC clock in `Intl` **and** in `Date.toString()`, `toDateString()`, `toLocaleString()` | Previously only `Intl` was spoofed, so one `new Date().toString()` exposed the phone's real zone. Fixed and now covered by a device test that runs on a +05:30 emulator. |
+| Whether Browz itself is in use (a marker property) | n/a | **Not detectable by a marker any more** | The old shield left `window.__BROWZ_MOBILE_SHIELD_ACTIVE__` and a `BrowzNative` property on every page. Both are gone; injection is now tracked in Java. |
+| Your installed fonts | Yes | **Not hidden** | Font enumeration is still readable. This is a known gap, not a claim. |
+| `navigator.plugins` / `mimeTypes` list | Yes | **Not normalised** | Untouched, so it reflects the device WebView. Gap. |
+| Number of CPU cores, RAM class | Yes | Fixed at 8 / 8 for every persona | Consistent, but identical across users — a weak but real shared value. |
+| Third-party cookies from ad/tracker domains | Often yes | Blocked | `setAcceptThirdPartyCookies(false)` plus the interception list. |
+| Requests to known tracker domains | Sent | Blocked before they leave | Rules are domain-suffix safe; first-party analytics and CNAME cloaking still pass. |
+| WebRTC ability to reveal a local or real IP | Possible | Blocked | `RTCPeerConnection` fails on purpose, which can itself break video calls. |
+| Service workers, cache storage, clipboard read, form autofill | Allowed | Blocked or disabled | This makes some offline-capable apps and "paste your code" flows not work; that is the trade. |
+| Storage of what you typed in forms | Saved by the browser | Not saved (`setSaveFormData(false)`) | Passwords are still handled by whatever the site's page does; Browz stores no vault. |
+
+### After you sign in, none of the above is the main problem
+
+Logging in hands the site a **first-party identity**: a cookie or token that says
+"this is account #12345". From that moment the site does not need to fingerprint
+you, because you told it who you are. It also learns your e-mail, your password
+(unless the page hashes client-side, which is rare), your recovery details, and
+every page you visit **on that site** while signed in. No browser can hide that;
+it is the purpose of signing in.
+
+What Browz still buys you after login, and what it does not:
+
+- **Still hidden:** other sites you visit in other tabs do not receive that cookie;
+  third-party trackers embedded in the page are blocked; the fingerprint you present
+  is stable-per-persona rather than your true device; your screen content is
+  protected from capture.
+- **Not hidden:** the site knows it is you. It can correlate this session with
+  previous ones through the account, and it sees your IP.
+- **The one thing that actually isolates logins is a container**, not the shield.
+  Separate containers keep separate cookie jars, so a Google login in one container
+  is invisible to a site opened in another. Use a different container per identity.
+
+### Honest limits of this section
+
+Everything above describes code in this repository, verified by this repository's
+own tests. There is no independent audit, no network-level anonymity, and no
+defence against a site that has your account. Names of specific gaps (fonts,
+`navigator.plugins`, fixed core count) are listed because they are real, not to be
+fixed by wording.
+
 ## Known-unverified areas
 
 0. **The tests are the project's own.** Two CI gates and five device suites raise the
