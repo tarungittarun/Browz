@@ -38,6 +38,17 @@ jobs:
           arch: x86_64
           script: |
             set +e
+            # The persona clock is UTC. A UTC emulator cannot distinguish a real spoof
+            # from a no-op, so move the device to a +05:30 zone first. The tests then
+            # fail if the device zone leaks into Date output.
+            adb wait-for-device
+            adb root >/dev/null 2>&1 || true
+            sleep 2
+            adb wait-for-device
+            adb shell setprop persist.sys.timezone Asia/Kolkata >/dev/null 2>&1 || true
+            adb shell service call alarm 3 s16 Asia/Kolkata >/dev/null 2>&1 || true
+            sleep 2
+            echo "device timezone: $(adb shell getprop persist.sys.timezone | tr -d '\r')"
             gradle connectedDebugAndroidTest -p android --no-daemon > device-test.log 2>&1
             echo $? > device-test.status
             cp device-test.log "$GITHUB_WORKSPACE/device-test.log" 2>/dev/null || true

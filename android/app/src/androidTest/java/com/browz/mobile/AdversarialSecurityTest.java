@@ -536,10 +536,26 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         assertTrue("toTimeString leaked a foreign clock: " + epochTime,
                 epochTime.startsWith("00:00:00 GMT+0000"));
 
-        String deviceZone = java.util.TimeZone.getDefault().getID();
-        String deviceName = java.util.TimeZone.getDefault().getDisplayName(false, java.util.TimeZone.LONG);
-        assertFalse("toString leaked the device timezone " + deviceZone, epoch.contains(deviceZone));
-        assertFalse("toString leaked the device zone name " + deviceName, epoch.contains(deviceName));
+        // The leak only exists when the device zone differs from the persona's. An
+        // emulator already set to UTC proves nothing, so require a real difference
+        // before asserting that the device zone is absent.
+        java.util.TimeZone device = java.util.TimeZone.getDefault();
+        int deviceOffset = device.getOffset(System.currentTimeMillis());
+        // Refuse to pass vacuously: on a UTC device a broken spoof looks identical to a
+        // working one. CI moves the emulator to Asia/Kolkata before running this.
+        assertTrue("this test is only meaningful on a non-UTC device; "
+                + "CI sets the emulator to Asia/Kolkata, got " + device.getID(),
+                deviceOffset != 0);
+        assertTrue("toString must render the persona zone name: " + epoch,
+                epoch.contains("(Coordinated Universal Time)"));
+        assertTrue("toString must report the persona offset, not the device's: " + epoch,
+                epoch.contains("GMT+0000"));
+        assertFalse("toString leaked the device timezone " + device.getID(), epoch.contains(device.getID()));
+        assertFalse("toString leaked the device zone name " + device.getDisplayName(false, java.util.TimeZone.LONG),
+                epoch.contains(device.getDisplayName(false, java.util.TimeZone.LONG)));
+        // A +05:30 device must never produce a +0530 rendering from the persona clock.
+        assertFalse("toString leaked the device GMT offset", epoch.contains("GMT+0530"));
+        assertFalse("toTimeString leaked the device clock", epochTime.contains("05:30:00"));
 
         String locale = evalString(view, "new Date(0).toLocaleTimeString('en-US')");
         assertTrue("toLocaleTimeString used the device zone instead of the persona: " + locale,
