@@ -1,0 +1,31 @@
+name: Temp APK export
+on: workflow_dispatch
+permissions:
+  contents: write
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+      - name: Build and verify
+        run: |
+          gradle assembleRelease -p android --no-daemon
+          cp android/app/build/outputs/apk/release/app-release.apk Browz-Mobile-1.0.3-preview.apk
+          sha256sum Browz-Mobile-1.0.3-preview.apk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+          ./test/verify-apk.sh Browz-Mobile-1.0.3-preview.apk
+      - name: Publish to a throwaway branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          WORK=$(mktemp -d); cp Browz-Mobile-1.0.3-preview.apk SHA256SUMS.txt "$WORK/"
+          cd "$WORK"; git init -q; git checkout -q -b apk-preview
+          git add -A; git -c user.name=b -c user.email=b@x commit -q -m export
+          git push --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" apk-preview
