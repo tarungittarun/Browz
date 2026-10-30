@@ -21,6 +21,8 @@ jobs:
         with:
           gradle-version: '8.7'
       - name: Build and verify
+        env:
+          BROWZ_ALLOW_EXPOSED_KEY: "1"
         run: |
           gradle assembleRelease -p android --no-daemon
           cp android/app/build/outputs/apk/release/app-release.apk Browz-Mobile-1.0.3-preview.apk
