@@ -1,5 +1,11 @@
 name: Temp APK export
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/906ee2db-browz
+    paths:
+      - '.github/workflows/temp-apk-export.yml'
 permissions:
   contents: write
 jobs:
