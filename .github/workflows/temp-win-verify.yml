@@ -49,3 +49,5 @@ jobs:
           git add -A
           git -c user.name=b -c user.email=b@x commit -q -m info
           git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" win-build-info
+
+# trigger: verify electron-builder 26 artifact naming
