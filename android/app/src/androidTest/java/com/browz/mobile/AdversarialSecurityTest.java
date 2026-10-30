@@ -691,10 +691,17 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
                 + "rtt:(navigator.connection||{}).rtt})");
         assertNotNull("connection probe failed", conn);
         // Report why the mask failed, if it did, instead of only that it did.
+        // Evidence, not a guess: did the sensors block run at all, and is data
+        // connection exposed anywhere on the prototype chain?
         String diag = evalString(view,
-                "(()=>{try{Object.defineProperty(navigator,'browzProbe',{get:()=>1,configurable:true});return 'define-ok';}catch(e){return 'define-err:'+e.message;}})()");
-        assertTrue("navigator does not accept own properties (" + diag + "); masked " + conn,
-                conn.contains("\"eff\":\"4g\"") || "define-err".equals(diag));
+                "JSON.stringify({conn:typeof navigator.connection,"
+                + "proto:typeof (window.Navigator&&Navigator.prototype.connection),"
+                + "gp:(typeof navigator.getGamepads==='function'?navigator.getGamepads().length:'none'),"
+                + "batt:typeof navigator.getBattery,"
+                + "plat:navigator.platform,"
+                + "tz:Intl.DateTimeFormat().resolvedOptions().timeZone})");
+        assertTrue("connection is not masked. evidence=" + diag + " probe=" + conn,
+                conn.contains("\"eff\":\"4g\""));
         assertTrue("effectiveType must be masked, got: " + conn, conn.contains("\"eff\":\"4g\""));
         assertTrue("downlink must be masked, got: " + conn, conn.contains("\"dl\":10"));
         assertTrue("rtt must be masked, got: " + conn, conn.contains("\"rtt\":50"));
