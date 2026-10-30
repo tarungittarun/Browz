@@ -15,6 +15,12 @@
 - CSV request-log export with a real status column.
 
 ### Security
+- **The persona can no longer contradict itself.** Selecting the iPhone profile used to
+  leave `navigator.userAgentData`, `navigator.vendor` ("Google Inc.") and
+  `navigator.appVersion` real, so one line of JavaScript revealed an Android Chromium
+  WebView behind a Safari user agent. These now derive from the persona's user agent.
+- **Device facts follow the persona**: `maxTouchPoints`, `devicePixelRatio`, the plugin
+  and mime lists, and the core count (previously a constant 8 for every visitor).
 - **The shield no longer identifies itself.** It used to define
   `window.__BROWZ_MOBILE_SHIELD_ACTIVE__` and a `BrowzNative` property on every page,
   so a single `'BrowzNative' in window` check revealed Browz. Both are gone; injection
