@@ -26,6 +26,8 @@ the build a trusted release. Windows users can run `shasum`/`Get-FileHash` and
 - **Verification** — every push runs an artifact gate over the built APK and an
   adversarial device suite on Android 34. Evidence and residual risk are in
   [THREAT-MODEL.md](THREAT-MODEL.md); history is in [CHANGELOG.md](CHANGELOG.md).
+- **Working notes** — every setting with its real default, everything built so far,
+  the bug list, and every open option with its cost: [WORKING-NOTES.md](WORKING-NOTES.md).
 
 ## Capabilities and limitations
 
