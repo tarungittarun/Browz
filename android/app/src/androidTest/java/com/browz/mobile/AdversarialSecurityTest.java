@@ -567,8 +567,10 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
         assertEquals("new Intl.DateTimeFormat() leaked the device clock", "00:00:00", direct);
 
         String twoArg = evalString(view, "new Date(0).toLocaleTimeString('en-US', { hour12: false })");
+        // V8 renders epoch midnight as either 00:00:00 or 24:00:00; a device clock
+        // in +05:30 would print 05:30:00, which is the leak this asserts against.
         assertTrue("toLocaleTimeString ignored the persona zone with explicit options: " + twoArg,
-                twoArg.contains("00:00:00"));
+                twoArg.matches("(00|24):00:00"));
 
         String marker = evalString(view, "typeof window.__BROWZ_MOBILE_SHIELD_ACTIVE__");
         assertEquals("the shield must not leave a detectable window marker", "undefined", marker);
