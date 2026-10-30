@@ -1,7 +1,7 @@
 {
   "name": "browz",
   "version": "1.0.0",
-  "description": "Browz — Multi-Tab Performance Capture & Control Browser",
+  "description": "Browz \u2014 Multi-Tab Performance Capture & Control Browser",
   "author": "Browz Team <browz@example.com>",
   "main": "electron/main.js",
   "scripts": {
@@ -11,7 +11,7 @@
     "build:win": "electron-builder --win nsis portable --x64",
     "build:installer": "electron-builder",
     "audit:independent": "node test/independent-audit.js --all",
-    "test": "node test/verify.js && node test/independent-audit.js --all && node test/mobile-regressions.js"
+    "test": "node test/verify.js && node test/independent-audit.js --all && node test/mobile-regressions.js && node test/dependency-policy.js"
   },
   "build": {
     "appId": "com.browz.capturebrowser",
@@ -31,11 +31,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "${productName}-${target}-${version}.${ext}"
@@ -67,7 +71,10 @@
   ],
   "license": "MIT",
   "devDependencies": {
-    "electron": "^33.2.0",
-    "electron-builder": "^25.1.8"
+    "electron": "^45.1.0",
+    "electron-builder": "^26.18.1"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

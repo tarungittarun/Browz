@@ -14,12 +14,12 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 24
 
       - name: Execute 20-Suite Strict End-to-End Verification on Windows
         shell: pwsh
@@ -47,7 +47,7 @@ jobs:
           gh release edit $tag --title "Browz Standalone Desktop Browser v1.0.0 (Windows .EXE)" --notes "### 100% Standalone Native Chromium Desktop Browser (Never Uses Edge/Chrome)`n`n1. **[Download Browz-Standalone-Installer-1.0.0.exe (~105 MB Offline Installer)](https://github.com/tarungittarun/Browz/releases/download/v1.0.0/Browz-Standalone-Installer-1.0.0.exe)** — Bundles the entire isolated Chromium engine (`Browz.exe`) inside a standard Windows Setup wizard. No Node.js or external browser required.`n2. **[Download Browz-Setup-1.0.0.exe (388 KB Web Installer)](https://github.com/tarungittarun/Browz/releases/download/v1.0.0/Browz-Setup-1.0.0.exe)** — Lightweight web installer that fetches the standalone Electron Chromium engine on first launch."
 
       - name: Upload EXE Workflow Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Browz-Windows-Standalone-EXE
           path: |
