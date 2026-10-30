@@ -8,7 +8,7 @@
     "start": "node server/index.js",
     "dev": "node server/index.js",
     "desktop": "electron .",
-    "build:win": "electron-builder --win nsis portable --x64",
+    "build:win": "electron-builder --win nsis portable --x64 --publish never",
     "build:installer": "electron-builder",
     "audit:independent": "node test/independent-audit.js --all",
     "test": "node test/verify.js && node test/independent-audit.js --all && node test/mobile-regressions.js && node test/dependency-policy.js"
@@ -41,21 +41,24 @@
             "x64"
           ]
         }
-      ],
-      "artifactName": "${productName}-${target}-${version}.${ext}"
+      ]
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Browz Browser"
+      "shortcutName": "Browz Browser",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
     },
     "mac": {
       "target": "dmg"
     },
     "linux": {
       "target": "AppImage"
+    },
+    "portable": {
+      "artifactName": "${productName}-Portable-${version}.${ext}"
     }
   },
   "keywords": [
