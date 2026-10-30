@@ -123,7 +123,7 @@ public class MainActivity extends Activity {
             // Chrome user agents also contain "Safari/", so test for Chrome first.
             this.navigatorVendor = ua.contains("Firefox/") ? ""
                 : (ua.contains("Chrome/") ? "Google Inc." : "Apple Computer, Inc.");
-            this.appVersion = ua.startsWith("Mozilla/") ? ua.substring("Mozilla/".length) : ua;
+            this.appVersion = ua.startsWith("Mozilla/") ? ua.substring("Mozilla/".length()) : ua;
             this.productSub = ua.contains("Firefox/") ? "20100101" : "20030107";
         }
     }

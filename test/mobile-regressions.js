@@ -117,6 +117,11 @@ assert.ok(java.includes("def(navigator, 'userAgentData', undefined)"),
 assert.ok(java.includes("ua.contains(\"Chrome/\") ? \"Google Inc.\""),
   'Chrome user agents contain Safari/, so Chrome must be tested before Safari');
 assert.ok(java.includes("def(navigator, 'plugins'"), 'plugin list must be normalised');
+
+// Java has String.length(), not the JS .length property. A parser accepts the wrong
+// form silently; javac does not, and that cost a full CI round.
+const jsHabit = java.match(/"[^"\n]*"\.length(?!\()/);
+assert.ok(!jsHabit, 'Java string literal uses the JS .length property: ' + (jsHabit && jsHabit[0]));
 assert.ok(java.includes("def(navigator, 'mimeTypes'"), 'mime list must be normalised');
 
 // Clock and Intl must describe the same timezone, or the mismatch itself is a fingerprint.
