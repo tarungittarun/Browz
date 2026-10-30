@@ -1985,6 +1985,23 @@ public class MainActivity extends Activity {
                 "      return m;" +
                 "    }, 'matchMedia');" +
                 "  } catch(e){}" +
+                // Permission states are a settings fingerprint: "denied" everywhere tells a
+                // page how the browser is configured, which is more than a stock browser says.
+                "  try {" +
+                "    if (navigator.permissions && navigator.permissions.query) {" +
+                "      const origQuery = navigator.permissions.query.bind(navigator.permissions);" +
+                "      navigator.permissions.query = markNative(function(d){" +
+                "        const name = d && d.name;" +
+                "        if (name === 'notifications' || name === 'push') {" +
+                "          return Promise.resolve({ state: 'prompt', name: name, onchange: null });" +
+                "        }" +
+                "        return origQuery(d);" +
+                "      }, 'query');" +
+                "    }" +
+                "    if (window.Notification) { try { Object.defineProperty(Notification, 'permission', { get: markNative(() => 'default', 'permission'), configurable: true }); } catch(e){} }" +
+                "  } catch(e){}" +
+                // A window larger than the spoofed screen is an obvious tell.
+                "  try { def(window, 'outerWidth', " + p.screenW + "); def(window, 'outerHeight', " + p.screenH + "); } catch(e){}" +
                 "  try { def(screen, 'orientation', { type: 'portrait-primary', angle: 0, onchange: null });" +
                 "    if (screen.orientation) { screen.orientation.lock = markNative(async function(){ return false; }, 'lock'); } } catch(e){}" +
                 "  if (navigator.mediaDevices) { navigator.mediaDevices.enumerateDevices = markNative(async () => [], 'enumerateDevices'); }" +

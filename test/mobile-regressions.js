@@ -113,6 +113,10 @@ assert.ok(java.includes("def(navigator, 'connection'"),
 assert.ok(java.includes("window.matchMedia = markNative"),
   'CSS pointer/hover capability queries must follow the persona');
 assert.ok(java.includes("def(screen, 'orientation'"), 'screen orientation must be pinned');
+assert.ok(java.includes("navigator.permissions.query = markNative"),
+  'permission states reveal settings and must be normalised');
+assert.ok(java.includes("def(window, 'outerWidth'"),
+  'window outer size must not exceed the spoofed screen');
 assert.ok(java.includes("def(navigator, 'vendor'"), 'navigator.vendor must match the persona browser');
 assert.ok(java.includes("def(navigator, 'appVersion'"), 'appVersion must match the persona user agent');
 assert.ok(java.includes("(shieldClientHints && p.chromium)"),
