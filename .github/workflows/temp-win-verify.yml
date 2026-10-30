@@ -24,8 +24,15 @@ jobs:
           node -p "require('./node_modules/electron/package.json').version" | Out-File -Append -Encoding utf8 build-info.txt
           node -p "require('./node_modules/electron-builder/package.json').version" | Out-File -Append -Encoding utf8 build-info.txt
       - name: Build the Windows installer
-        run: npm run build:win
+        run: |
+          2>&1 | Tee-Object -FilePath build-log.txt
+          $code = 0
+          npm run build:win 2>&1 | Tee-Object -FilePath build-log.txt -Append
+          $code = $LASTEXITCODE
+          "exit=$code" | Out-File -Append -Encoding utf8 build-info.txt
+          exit 0
       - name: Record artifact facts
+        if: always()
         run: |
           Get-ChildItem dist -Filter *.exe | ForEach-Object {
             $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
@@ -33,11 +40,13 @@ jobs:
           }
           Get-Content build-info.txt
       - name: Publish facts to a throwaway branch
+        if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git init -q temp-info; cd temp-info
           Copy-Item ../build-info.txt .
+          if (Test-Path ../build-log.txt) { Copy-Item ../build-log.txt . }
           git checkout -q -b win-build-info
           git add -A
           git -c user.name=b -c user.email=b@x commit -q -m info
