@@ -1957,9 +1957,15 @@ public class MainActivity extends Activity {
                 "      addEventListener: markNative(function(){}, 'addEventListener')," +
                 "      removeEventListener: markNative(function(){}, 'removeEventListener')" +
                 "    };" +
-                "    def(navigator, 'connection', fakeConn);" +
-                "    def(navigator, 'mozConnection', undefined);" +
-                "    def(navigator, 'webkitConnection', undefined);" +
+                // Some WebView builds expose connection only on the prototype, and a
+                // failed defineProperty would otherwise pass silently.
+                "    const installConn = (obj) => {" +
+                "      if (!obj) return false;" +
+                "      try { Object.defineProperty(obj, 'connection', { get: markNative(() => fakeConn, 'connection'), configurable: true }); return true; } catch(e) { return false; }" +
+                "    };" +
+                "    let connOk = installConn(navigator);" +
+                "    if (!connOk && typeof Navigator !== 'undefined') connOk = installConn(Navigator.prototype);" +
+                "    if (!connOk) def(navigator, 'connection', fakeConn);" +
                 "  } catch(e){}" +
                 // Touch capability is also advertised through CSS media queries, which a
                 // page can read without touching navigator at all.

@@ -690,6 +690,11 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
                 + "dl:(navigator.connection||{}).downlink,"
                 + "rtt:(navigator.connection||{}).rtt})");
         assertNotNull("connection probe failed", conn);
+        // Report why the mask failed, if it did, instead of only that it did.
+        String diag = evalString(view,
+                "(()=>{try{Object.defineProperty(navigator,'browzProbe',{get:()=>1,configurable:true});return 'define-ok';}catch(e){return 'define-err:'+e.message;}})()");
+        assertTrue("navigator does not accept own properties (" + diag + "); masked " + conn,
+                conn.contains("\"eff\":\"4g\"") || "define-err".equals(diag));
         assertTrue("effectiveType must be masked, got: " + conn, conn.contains("\"eff\":\"4g\""));
         assertTrue("downlink must be masked, got: " + conn, conn.contains("\"dl\":10"));
         assertTrue("rtt must be masked, got: " + conn, conn.contains("\"rtt\":50"));
