@@ -338,6 +338,32 @@ public class AdversarialSecurityTest extends ActivityInstrumentationTestCase2<Ma
                 personaBefore, ((Integer) field(activity, "activePersonaIdx")).intValue());
     }
 
+    public void testNoAccountOrSyncStateIsStored() throws Throwable {
+        final MainActivity activity = getActivity();
+        // Force every ordinary write path to run.
+        onUi(() -> {
+            call(activity, "saveBookmarks");
+            call(activity, "saveContainers");
+            call(activity, "saveNetworkRules");
+        });
+        Context ctx = getInstrumentation().getTargetContext();
+        java.util.Set<String> keys = ctx.getSharedPreferences("MainActivity", Context.MODE_PRIVATE)
+                .getAll().keySet();
+        java.util.Set<String> allowed = new java.util.HashSet<>(java.util.Arrays.asList(
+                "bookmarks", "containers", "netRules", "sessionOpen"));
+        for (String key : keys) {
+            assertTrue("unexpected stored state (account, token or sync data?): " + key,
+                    allowed.contains(key));
+        }
+        // Nothing account-shaped may exist in any preference file.
+        for (java.io.File file : new java.io.File(ctx.getApplicationInfo().dataDir + "/shared_prefs").listFiles() == null
+                ? new java.io.File[0]
+                : new java.io.File(ctx.getApplicationInfo().dataDir + "/shared_prefs").listFiles()) {
+            assertFalse("unexpected preference file: " + file.getName(),
+                    file.getName().matches("(?i).*(account|auth|token|session_store|sync).*"));
+        }
+    }
+
     public void testFilePickerIsBlockedByDefault() throws Throwable {
         final MainActivity activity = getActivity();
         final boolean[] handled = {false};

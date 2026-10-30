@@ -1451,7 +1451,7 @@ public class MainActivity extends Activity {
         box.setPadding(dp(18), dp(12), dp(18), dp(4));
 
         TextView hint = new TextView(this);
-        hint.setText("Each container is a separate account space. Switching closes every page in the current container, wipes its cookies and site storage, then opens a fresh start page. Nothing is shared between containers while Browz runs, and nothing is saved after you close Browz.");
+        hint.setText("Browz has no Browz account: nothing to sign in to, nothing synced. A container is a local space for a different website login, for example Personal and Work. Switching closes every page in the current container, wipes its cookies and site storage, then opens a fresh start page. Nothing is shared between containers while Browz runs, and nothing is saved after you close Browz.");
         hint.setTextSize(12f);
         hint.setPadding(0, 0, 0, dp(10));
         box.addView(hint);
@@ -2387,7 +2387,7 @@ public class MainActivity extends Activity {
 
     private void showBrowserMenu() {
         String[] items = {"New tab", "Bookmarks", "Find, zoom and video", "Privacy controls",
-            "Network rules", "Containers (accounts)", "Hardware & permissions",
+            "Network rules", "Containers (separate logins)", "Hardware & permissions",
             "Request log", "Share page", "Clear browsing data", "Privacy and limitations"};
         openDialog = new AlertDialog.Builder(this)
             .setTitle("Browz " + getVersionName() + " · " + activeContainerName())
@@ -2459,7 +2459,7 @@ public class MainActivity extends Activity {
 
     private void showPrivacyInfo() {
         new AlertDialog.Builder(this).setTitle("Privacy and limitations")
-            .setMessage("Browz is not Tor or a VPN: websites and network providers may see your IP address. Containers close every page and wipe cookies plus site storage when you switch, so two accounts are not shared; tabs inside one container do share cookies, and low-cache tabs are not private. Container sessions end when Browz closes. Request logging is incomplete and cannot show response status or bodies. Network profiles simulate web-facing values, not device Wi-Fi controls. Some page-level shields run after page scripts and are not guaranteed. Bookmarks are saved on this device and may contain sensitive addresses. Android, keyboards and other privileged software may access data.")
+            .setMessage("Browz is not Tor or a VPN: websites and network providers may see your IP address. Containers close every page and wipe cookies plus site storage when you switch, so two accounts are not shared; tabs inside one container do share cookies, and low-cache tabs are not private. Container sessions end when Browz closes. Request logging is incomplete and cannot show response status or bodies. Network profiles simulate web-facing values, not device Wi-Fi controls. Some page-level shields run after page scripts and are not guaranteed. Bookmarks and container names are saved on this device and may contain sensitive addresses. Android, keyboards and other privileged software may access data. There is no Browz account, no sync and no telemetry; the one exception is that Android WebView Safe Browsing may ask Google whether a visited address is dangerous, and that lookup happens without any account.")
             .setPositiveButton("Understood", null).show();
     }
 

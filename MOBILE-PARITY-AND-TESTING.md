@@ -13,7 +13,17 @@ shows the version, so the build in use can be identified on-device.
 
 Browz Mobile uses Android System WebView. It is not the Electron desktop browser and cannot reproduce every desktop feature. The mobile menu provides tabs, bookmarks saved on the device, find/text zoom, video fit, privacy settings, containers for separate accounts, network allow/block rules, a hardware and permission report, a request log with optional real status probes, share and a confirmed clear-data action.
 
-### Containers (separate accounts)
+### No account, no sync, no telemetry
+
+Browz has no account system: no sign-up, no login, no sync endpoint, no analytics.
+The only state written to disk is a fixed allowlist - `bookmarks`, `containers`,
+`netRules`, `sessionOpen` (and `sessionCrashed`) - in the app's private
+preferences, and a device test fails if any other key or account-shaped file
+appears. The single third-party lookup is Android WebView Safe Browsing, which may
+ask Google whether an address is dangerous; it involves no account and is
+controlled by the platform.
+
+### Containers (separate website logins)
 
 WebView has no per-container storage partition. Browz therefore implements containers by destroying every open page, wiping cookies and site storage, and then opening a fresh page when you switch. Consequences worth stating plainly:
 

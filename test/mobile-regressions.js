@@ -52,6 +52,16 @@ assert.ok(java.includes('onReceivedHttpAuthRequest('));
 assert.ok(java.includes('onShowFileChooser('), 'file pickers must be guarded');
 assert.ok(java.includes('setMediaPlaybackRequiresUserGesture(true)'), 'autoplay with sound must require a gesture');
 assert.ok(java.includes('setSafeBrowsingEnabled(true)'));
+
+// No account system: only a known allowlist of local preferences may be written.
+const writtenKeys = [...java.matchAll(/put(?:String|Boolean|Int|Long)\("([A-Za-z0-9_]+)"/g)].map((m) => m[1]);
+const allowedKeys = new Set(['bookmarks', 'containers', 'netRules', 'sessionOpen', 'sessionCrashed']);
+for (const key of new Set(writtenKeys)) {
+  assert.ok(allowedKeys.has(key), `unexpected preference key (account/sync data?): ${key}`);
+}
+assert.ok(java.includes('no Browz account'), 'the app must tell users it needs no account');
+assert.ok(!java.includes('login('), 'there must be no sign-in call');
+assert.ok(!java.includes('Bearer '), 'no API tokens may be stored or sent');
 assert.ok(java.includes('WebView.setWebContentsDebuggingEnabled(false)'));
 const manifestStrict = fs.readFileSync('android/app/src/main/AndroidManifest.xml', 'utf8');
 assert.ok(manifestStrict.includes('android:allowBackup="false"'));
